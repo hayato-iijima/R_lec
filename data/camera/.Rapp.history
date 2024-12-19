@@ -1,0 +1,1368 @@
+chooseCRANmirror()
+install.packages("prettymapr")
+library(orettymapr)
+library(prettymapr)
+#-------------------------##
+# データの読み込み#
+#-------------------------##
+files <- list.files(here("data/modify"), recursive=TRUE, pattern="results_isc*")#
+for (i in 1:length(files)) {#
+  Colnames <- read_excel(here("data/modify", files[i]), sheet="files") %>% names(.)#
+  # spの列をtext指定で読み込むための準備#
+  sp_loc <- grep("sp", Colnames)#
+  col_prefix <- rep("guess", length(Colnames))#
+  col_prefix[sp_loc] <- "text"#
+  # inside/outsideの列をtext指定で読み込むための準備#
+  inside_loc <- grep("inside", Colnames)#
+  col_prefix[inside_loc] <- "text"#
+  temp <- read_excel(here("data/modify", files[i]), sheet="files", col_types=col_prefix) %>%#
+    # 1枚の写真に複数個体が撮影されていた場合、個体ごとに別の行になっているので、#
+    # 1行1イベントに変更する#
+    ## まず、absとrelのpathを結合し、1イベントに固有のidを作成#
+    mutate(newid=paste(absolute_path, relative_path, sep="_")) %>%#
+    group_by(newid) %>%#
+    ## 1イベントごとの合計撮影枚数を計数#
+    mutate(n_photo=sum(n_detections, na.rm=TRUE)) %>%#
+    ungroup() %>%#
+    ## abolute_pathが空欄でなくnewidがダブっていないデータだけを残す#
+    filter(!is.na(absolute_path)&!duplicated(newid)) %>%#
+    # 1つ前のデータとの撮影時間の差分を計算#
+    mutate(time_diff = as.numeric(difftime(DateTime, lag(DateTime), units = "secs")),#
+      # 約5分間隔（前後10秒の誤差を許容）で撮影されているデータだけを抽出#
+      is_approx_5min = row_number() == 1 | (time_diff >= 290 & time_diff <= 310)) %>%#
+    # 最初のデータからスタートして、「約5分間隔」を満たす行だけを抽出#
+    filter(is_approx_5min) %>%#
+    # cameraidを追加#
+    mutate(cameraid=str_extract(files[i], "isc\\d{1,2}")) %>%#
+    rename_with(., ~"inside", contains("inside")) %>%#
+    select(absolute_path, relative_path, cameraid, DateTime)#
+  if (i==1) { df <- temp#
+  } else { df <- df %>% bind_rows(., temp)}#
+}#
+df <- df %>%#
+  mutate(Y=year(DateTime), M=month(DateTime)) %>%#
+  mutate(YM=paste(Y, formatC(M, flag="0", width=2), sep="_"))
+q()
+chooseCRANmirror()
+install.packages("bayesplot")
+q()
+mean(c(27,56))
+q()
+mean(c(4,15))
+q()
+rnorm(100, 0, 1)
+set.seed(1)
+rnorm(100, 0, 1)
+hist(rnorm(100, 0, 1))
+hist(rnorm(10000, -1,3))
+set.seed(1)
+rbinom(100, 1, 0.5)
+rbinom(100, 10, 0.5)
+rbinom(100, 1, 0.5)
+set.seed(1)
+rpois(100, 3)
+rpois(100, 5)
+hist(rpois(100, 5)
+)
+set.seed(1)
+rnorm(100, 0, 1)
+d <- rnorm(100, 0, 1)
+d
+test <- rnorm(100, 0, 1)
+test
+d <- rnorm(100, 0, 1)
+e <- rpois(100, 3)
+d+e
+save.image()
+sava.image(file="241113.RData")
+save.image(file="241113.RData")
+q()
+load("/Users/hayatoiijima/241113.RData")
+d
+e
+q()
+d
+演習1
+# 演習1#
+set.seed(1)#
+hist(rnorm(10000, -1, 3))#
+# 演習2#
+rbinom(100, 1, 0.5)#
+# 演習3#
+rpois(100, 5)#
+# 演習4#
+d <- rnorm(100, 0, 1) #
+e <- rpois(100, 3)#
+d + e
+1:30
+30:20
+(-10):5
+res <- glm(y ~ x1 + x2, family=poisson(link="log"), data = d)
+set.seed(1)#
+N <- 100#
+x1 <- rnorm(N, 0, 2)#
+x2 <- rnorm(N, 0, 2)#
+intercept <- -2#
+y <- rpois(N, exp(intercept + x1)) #x2は影響しない#
+d <- data.frame(y, x1, x2)
+res <- glm(y ~ x1 + x2, family=poisson(link="log"), data = d)
+summary(res)
+1.0E-3
+1.0E-6
+1.0E-4
+1.0E+2
+sqrt(1000)
+# NIMBLEを用いた解析#
+library(nimble)#
+modelcode <- nimbleCode(#
+{#
+#BUGS言語でモデルを記述する#
+for (i in 1:N) {#
+  # 決定論的モデル（切片+x1+x2）#
+  # とリンク関数（log）#
+  log(lambda[i]) <- intercept + bx1*x1[i] + bx2*x2[i]#
+  # lambda[i] <- exp(intercept + bx1*x1[i] + bx2*x2[i])としても同じ#
+  # 確率論的モデル（ポアソン分布）#
+  y[i] ~ dpois(lambda[i])#
+}#
+# パラメータの事前分布#
+intercept ~ dnorm(0.0, 1.0E-3) # 切片#
+bx1 ~ dnorm(0.0, 1.0E-3)       # 説明変数x1の係数#
+bx2 ~ dnorm(0.0, 1.0E-3)       # 説明変数x2の係数#
+}                              # モデルの記述はここまで#
+)#
+# データと定数の準備#
+list_data <- list(y=y, x1=x1, x2=x2)#
+list_cons <- list(N=N)#
+# 初期値の設定#
+init1 <- list(intercept=0, bx1=0, bx2=0)    # 連鎖1の初期値#
+init2 <- list(intercept=-1, bx1=-1, bx2=-1) # 連鎖2の初期値#
+init3 <- list(intercept=1, bx1=1, bx2=1)    # 連鎖3の初期値#
+inits <- list(init1, init2, init3)#
+# 監視対象パラメータの設定#
+parameters <- c("intercept", "bx1", "bx2")#
+## MCMC法の設定#
+nc <- 3#
+nb <- 1000#
+ni <- 2000#
+nt <- 1#
+# MCMC法の実行#
+out <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)
+library(coda)#
+resdf <- as.data.frame(out$summary$all.chain)#
+GR.diag <- gelman.diag(out$samples, multivariate = FALSE)#
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+resdf
+library(bayesplot)#
+mcmc_trace(out$samples) +#
+scale_color_discrete()
+library(bayesplot)#
+mcmc_trace(out$samples) +#
+bayesplot::scale_color_discrete()
+library(ggplot2)
+library(bayesplot)#
+mcmc_trace(out$samples) +#
+scale_color_discrete()
+mcmc_hist(out$samples)
+mcmc_intervals(out$samples)
+mcmc_dens(out$samples)
+Nplot <- 10
+sigma <- 1
+set.seed(11)
+epsilon <- rnorm(Nplot, 0, sigma)
+ncounts <- c(10, 10, 4, 11, 7, 14, 8, 18, 11, 7)
+epsilon_plot <- rep(epsilon, ncounts)
+plotid <- rep(1:10, ncounts)
+N <- sum(ncounts)
+N
+x1 <- rnorm(N, 0, 2)
+x2 <- rnorm(N, 0, 2)
+intercept <- -2
+y <- rpois(N, exp(intercept + x1 + epsilon_plot))
+d2 <- data.frame(y, x1, x2, epsilon_plot, plotid)
+head(d2)
+y
+hist(y)
+hist(y, breaks=25)
+mean(y)
+par(mfrow=c(1,2))
+hist(y, breaks=25)
+hist(rpois(N, mean(y)), breaks=25)
+hist(y, breaks=25, xlim=c(0, 25))
+hist(rpois(N, mean(y)), breaks=25, xlim=c(0, 25))
+hist(y, breaks=25, xlim=c(0, 25))
+hist(rpois(N, mean(y)), breaks=4, xlim=c(0, 25))
+library(glmmML)
+res2 <- glmmML(y ~ x1 + x2, cluster=plotid, family=poisson, d2)
+summary(res2)
+# 演習7#
+# BUGS言語によるモデルの記述#
+library(nimble)#
+modelcode <- nimbleCode(#
+{#
+for (i in 1:N) {#
+  # 決定論的モデル（切片+x1+x2+変量効果）#
+  # とリンク関数（log）#
+  log(lambda[i]) <- intercept + bx1*x1[i] + bx2*x2[i] + ranef[plotid[i]]#
+  # ranefは変量効果のパラメータ#
+  # 確率論的モデル（ポアソン分布）#
+  y[i] ~ dpois(lambda[i])#
+}#
+#パラメータの事前分布#
+intercept ~ dnorm(0.0, 1.0E-3) # 切片#
+bx1 ~ dnorm(0.0, 1.0E-3)       # 説明変数x1の係数#
+bx2 ~ dnorm(0.0, 1.0E-3)       # 説明変数x2の係数#
+# 変量効果の事前分布#
+for (j in 1:Nplot) {           # プロット数だけ繰り返す#
+  ranef[j] ~ dnorm(0.0, tau)   # 分散（sigma*sigma）の逆数を指定#
+}#
+tau <- pow(sigma, -2)          # 標準偏差（sigma）をtauに変換#
+sigma ~ dunif(0, 100)          # sigmaの事前分布#
+}                              # モデルの記述はここまで#
+)#
+# データと定数の準備#
+list_data <- list(x1=x1, x2=x2, y=y)#
+list_cons <- list(N=N, plotid=plotid, Nplot=Nplot)#
+# 初期値の設定#
+init1 <- list(intercept=0, bx1=0, bx2=0, ranef=rnorm(Nplot, 0, 1), sigma=5)#
+init2 <- list(intercept=-1, bx1=-1, bx2=-1, ranef=rnorm(Nplot, -1, 1), sigma=1)#
+init3 <- list(intercept=1, bx1=1, bx2=1, ranef=rnorm(Nplot, 1, 1), sigma=10)#
+inits <- list(init1, init2, init3)#
+# 監視対象パラメータの設定#
+parameters <- c("intercept", "bx1", "bx2", "ranef", "sigma")#
+## MCMC法の設定#
+nc <- 3#
+nb <- 20000#
+ni <- 50000#
+nt <- 30#
+# MCMC法の実行#
+out2 <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)
+# 要約量の計算#
+library(coda)#
+resdf <- as.data.frame(out2$summary$all.chain)#
+GR.diag <- gelman.diag(out2$samples, multivariate = FALSE)#
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+resdf
+nc <- 3#
+nb <- 1000#
+ni <- 2000#
+nt <- 1
+# MCMC法の実行#
+out2 <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)
+# 要約量の計算#
+library(coda)#
+resdf <- as.data.frame(out2$summary$all.chain)#
+GR.diag <- gelman.diag(out2$samples, multivariate = FALSE)#
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+resdf
+modelcode
+nc <- 3#
+nb <- 20000#
+ni <- 50000#
+nt <- 30#
+# MCMC法の実行#
+out2 <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)#
+###計算結果の出力#
+# 要約量の計算#
+library(coda)#
+resdf <- as.data.frame(out2$summary$all.chain)#
+GR.diag <- gelman.diag(out2$samples, multivariate = FALSE)#
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+resdf
+library(ggplot2)#
+library(bayesplot)#
+mcmc_trace(out2$samples) +#
+ scale_color_discrete()#
+# パラメータを制限する場合は引数でパラメータ名を指定#
+mcmc_trace(out2$samples, pars=paste0("ranef[", 1:10, "]"))
+set.seed(1)#
+# 調査箇所数#
+Nsite <- 25#
+# 調査機会数#
+Nrep <- 20#
+# 検出率の平均#
+p_det <- 0.6#
+# 平均個体群サイズlambda#
+lambda <- 30#
+# 過程モデルに従って局所個体数を生成#
+N <- rpois(Nsite, lambda)#
+# 調査箇所（i）かつ調査機会ごとの係数値を格納する箱#
+y <- matrix(NA, nrow=Nrep, ncol=Nsite)#
+# 調査箇所（i）かつ調査機会ごとの係数値を生成#
+for (i in 1:Nsite) {#
+  y[, i] <- rbinom(Nrep, N[i], p_det)#
+}
+y
+set.seed(1)#
+# 調査箇所数#
+Nsite <- 25#
+# 調査機会数#
+Nrep <- 10#
+# 検出率の平均#
+p_det <- 0.6#
+# 平均個体群サイズlambda#
+lambda <- 30#
+# 過程モデルに従って局所個体数を生成#
+N <- rpois(Nsite, lambda)#
+# 調査箇所（i）かつ調査機会ごとの係数値を格納する箱#
+y <- matrix(NA, nrow=Nrep, ncol=Nsite)#
+# 調査箇所（i）かつ調査機会ごとの係数値を生成#
+for (i in 1:Nsite) {#
+  y[, i] <- rbinom(Nrep, N[i], p_det)#
+}#
+#生成したデータを見る#
+# データフレームにまとめる#
+library(tidyverse)#
+ydf <- as.data.frame(t(y))#
+d <- pivot_longer(ydf, cols=1:ncol(ydf), names_to="Data", values_to="Value")#
+d <- rbind(d, data.frame(Data=rep("True", Nsite), Value=N))#
+d$Site <- rep(1:Nsite, Nrep+1)#
+library(ggplot2)#
+p1 <- ggplot(d, aes(x=Site, y=Value, color=Data))+#
+        geom_point()+#
+        labs(x="調査箇所のID", y="個体数")+#
+        theme(text = element_text(family="HiraginoSans-W3"))#
+p1#
+ggsave("data_nmix.pdf", device=cairo_pdf)#
+# BUGS言語によるモデルの記述（演習8）#
+library(nimble)#
+modelcode <- nimbleCode(#
+{#
+# 過程モデル#
+for (i in 1:Nsite) {#
+  # 調査箇所ごとの局所個体数は#
+  # 平均個体数からポアソン分布に従って得られる#
+  EN[i] ~ dpois(meanN)#
+}#
+# 平均個体数の事前分布#
+meanN ~ dunif(0, 1000)#
+# 観測モデル#
+# 検出率の事前分布#
+estp ~ dunif(0, 1)#
+for (i in 1:Nsite) {        # 調査箇所#
+  for (j in 1:Nrep) {       # 調査機会#
+    # 調査箇所（i）かつ調査機会（j）ごとの計数値#
+    y[j, i] ~ dbin(estp, EN[i])#
+  }#
+}#
+} #モデルの記述はここまで#
+)#
+#データを用意する（演習9）#
+list_data <- list(y=y)#
+list_cons <- list(Nsite=Nsite, Nrep=Nrep)#
+#初期値を与える#
+init1 <- list(EN=rpois(Nsite, lambda)+10, meanN=lambda+10, estp=0.5)#
+init2 <- list(EN=rpois(Nsite, lambda)+8, meanN=lambda+8, estp=0.9)#
+init3 <- list(EN=rpois(Nsite, lambda)+15, meanN=lambda+15, estp=0.7)#
+inits <- list(init1, init2, init3)#
+#監視対象パラメータを設定する#
+parameters <- c("EN", "meanN", "estp") #, "fit_data", "fit_new")#
+## MCMC法の設定#
+nc <- 3#
+nb <- 10000#
+ni <- 20000#
+nt <- 10#
+# MCMC法の実行#
+outnmix <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)#
+###計算結果の出力#
+# 要約量の計算#
+library(coda)#
+resdf <- as.data.frame(outnmix$summary$all.chain)#
+GR.diag <- gelman.diag(outnmix$samples, multivariate = FALSE)#
+resdf$Rhat <- GR.diag$psrf[,"Point est."]#
+## MCMCトレースの作図#
+# ggplot#
+library(ggplot2)#
+library(bayesplot)#
+mcmc_trace(outnmix$samples) +#
+ scale_color_discrete()#
+ggsave("nmix_mcmctrace.pdf", device=cairo_pdf)#
+#設定値との関係#
+library(ggplot2)#
+library(bayesplot)#
+library(patchwork)#
+p1 <- mcmc_hist(outnmix$samples, pars="meanN") +#
+        geom_vline(xintercept=lambda)#
+p2 <- mcmc_hist(outnmix$samples, pars="estp")+#
+        geom_vline(xintercept=p_det)+#
+        scale_x_continuous(limits=c(0,1))#
+compn <- data.frame(Setting=N,#
+                    Estimates=resdf[grep("EN",rownames(resdf)),2],#
+                    Lci=resdf[grep("EN",rownames(resdf)),4],#
+                    Uci=resdf[grep("EN",rownames(resdf)),5])#
+p3 <- ggplot(compn, aes(x=Setting, y=Estimates))+#
+      geom_point()+#
+      geom_abline(intercept=0, slope=1)+#
+      geom_errorbar(aes(ymin=Lci, ymax=Uci))#
+p1 + p2 + p3 + plot_layout(ncol=2)
+modelcode
+set.seed(1)#
+# 調査箇所数#
+Nsite <- 25#
+# 調査機会数#
+Nrep <- 20#
+# 検出率の平均#
+p_det <- 0.6#
+# 平均個体群サイズlambda#
+lambda <- 30#
+# 過程モデルに従って局所個体数を生成#
+N <- rpois(Nsite, lambda)#
+# 調査箇所（i）かつ調査機会ごとの係数値を格納する箱#
+y <- matrix(NA, nrow=Nrep, ncol=Nsite)#
+# 調査箇所（i）かつ調査機会ごとの係数値を生成#
+for (i in 1:Nsite) {#
+  y[, i] <- rbinom(Nrep, N[i], p_det)#
+}
+# BUGS言語によるモデルの記述（演習8）#
+library(nimble)#
+modelcode <- nimbleCode(#
+{#
+# 過程モデル#
+for (i in 1:Nsite) {#
+  # 調査箇所ごとの局所個体数は#
+  # 平均個体数からポアソン分布に従って得られる#
+  EN[i] ~ dpois(meanN)#
+}#
+# 平均個体数の事前分布#
+meanN ~ dunif(0, 1000)#
+# 観測モデル#
+# 検出率の事前分布#
+estp ~ dunif(0, 1)#
+for (i in 1:Nsite) {        # 調査箇所#
+  for (j in 1:Nrep) {       # 調査機会#
+    # 調査箇所（i）かつ調査機会（j）ごとの計数値#
+    y[j, i] ~ dbin(estp, EN[i])#
+  }#
+}#
+} #モデルの記述はここまで#
+)#
+#データを用意する（演習9）#
+list_data <- list(y=y)#
+list_cons <- list(Nsite=Nsite, Nrep=Nrep)#
+#初期値を与える#
+init1 <- list(EN=rpois(Nsite, lambda)+10, meanN=lambda+10, estp=0.5)#
+init2 <- list(EN=rpois(Nsite, lambda)+8, meanN=lambda+8, estp=0.9)#
+init3 <- list(EN=rpois(Nsite, lambda)+15, meanN=lambda+15, estp=0.7)#
+inits <- list(init1, init2, init3)#
+#監視対象パラメータを設定する#
+parameters <- c("EN", "meanN", "estp") #, "fit_data", "fit_new")#
+## MCMC法の設定#
+nc <- 3#
+nb <- 10000#
+ni <- 20000#
+nt <- 10#
+# MCMC法の実行#
+outnmix <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)#
+###計算結果の出力#
+# 要約量の計算#
+library(coda)#
+resdf <- as.data.frame(outnmix$summary$all.chain)#
+GR.diag <- gelman.diag(outnmix$samples, multivariate = FALSE)#
+resdf$Rhat <- GR.diag$psrf[,"Point est."]#
+## MCMCトレースの作図#
+# ggplot#
+library(ggplot2)#
+library(bayesplot)#
+mcmc_trace(outnmix$samples) +#
+ scale_color_discrete()#
+ggsave("nmix_mcmctrace.pdf", device=cairo_pdf)#
+#設定値との関係#
+library(ggplot2)#
+library(bayesplot)#
+library(patchwork)#
+p1 <- mcmc_hist(outnmix$samples, pars="meanN") +#
+        geom_vline(xintercept=lambda)#
+p2 <- mcmc_hist(outnmix$samples, pars="estp")+#
+        geom_vline(xintercept=p_det)+#
+        scale_x_continuous(limits=c(0,1))#
+compn <- data.frame(Setting=N,#
+                    Estimates=resdf[grep("EN",rownames(resdf)),2],#
+                    Lci=resdf[grep("EN",rownames(resdf)),4],#
+                    Uci=resdf[grep("EN",rownames(resdf)),5])#
+p3 <- ggplot(compn, aes(x=Setting, y=Estimates))+#
+      geom_point()+#
+      geom_abline(intercept=0, slope=1)+#
+      geom_errorbar(aes(ymin=Lci, ymax=Uci))#
+p1 + p2 + p3 + plot_layout(ncol=2)
+set.seed(1)#
+# 調査箇所数#
+Nsite <- 25#
+# 調査機会数#
+Nrep <- 20#
+# 検出率の平均#
+p_det <- 0.6#
+# 調査箇所の個体数量は、箇所ごとの食物量によって決まる#
+food <- rnorm(Nsite, 0, 0.5)#
+# 対数尺度での平均個体群サイズlog_lambda#
+log_lambda <- log(30)#
+# 過程モデルに従って局所個体数を生成#
+N <- rpois(Nsite, exp(log_lambda + food))#
+# 調査箇所（i）かつ調査機会ごとの係数値を格納する箱#
+y <- matrix(NA, nrow=Nrep, ncol=Nsite)#
+# 調査箇所（i）かつ調査機会ごとの係数値を生成#
+for (i in 1:Nsite) {#
+  y[, i] <- rbinom(Nrep, N[i], p_det)#
+}
+y
+# 個体数量のモデルに共変量を入れる#
+#データの生成#
+set.seed(1)#
+# 調査箇所数#
+Nsite <- 25#
+# 調査機会数#
+Nrep <- 20#
+# 検出率の平均#
+p_det <- 0.6#
+# 調査箇所の個体数量は、箇所ごとの食物量によって決まる#
+food <- rnorm(Nsite, 0, 0.5)#
+# 対数尺度での平均個体群サイズlog_lambda#
+log_lambda <- log(30)#
+# 過程モデルに従って局所個体数を生成#
+N <- rpois(Nsite, exp(log_lambda + food))#
+# 調査箇所（i）かつ調査機会ごとの係数値を格納する箱#
+y <- matrix(NA, nrow=Nrep, ncol=Nsite)#
+# 調査箇所（i）かつ調査機会ごとの係数値を生成#
+for (i in 1:Nsite) {#
+  y[, i] <- rbinom(Nrep, N[i], p_det)#
+}#
+# 演習11#
+# BUGS言語によるモデルの記述#
+library(nimble)#
+modelcode <- nimbleCode(#
+{#
+# 過程モデル#
+for (i in 1:Nsite) {#
+  # 調査箇所ごとの局所個体数は#
+  # 箇所の食物量と平均の個体数量で決まる#
+  log(lambda[i]) <- log_lambda + bF*food[i]#
+  EN[i] ~ dpois(lambda[i])#
+}#
+# 対数尺度での平均個体数の事前分布#
+log_lambda ~ dnorm(0.0, 1.0E-3)#
+# 食物量の係数#
+bF ~ dnorm(0.0, 1.0E-3)#
+# 観測モデル#
+# 検出率の事前分布#
+estp ~ dunif(0, 1)#
+for (i in 1:Nsite) {        # 調査箇所#
+  for (j in 1:Nrep) {       # 調査機会#
+    # 調査箇所（i）かつ調査機会（j）ごとの係数値#
+    y[j, i] ~ dbin(estp, EN[i])#
+  }#
+}#
+} #モデルの記述はここまで#
+)#
+# データの準備#
+list_data <- list(y=y, food=food)#
+list_cons <- list(Nsite=Nsite, Nrep=Nrep)#
+# 初期値の設定#
+init1 <- list(EN=rpois(Nsite, exp(log_lambda+food))+5, log_lambda=log(5), estp=0.5, bF=0)#
+init2 <- list(EN=rpois(Nsite, exp(log_lambda+food))+3, log_lambda=log(3), estp=0.2, bF=-0.1)#
+init3 <- list(EN=rpois(Nsite, exp(log_lambda+food))+10, log_lambda=log(10), estp=0.7, bF=0.1)#
+inits <- list(init1, init2, init3)#
+# 監視対象パラメータの#
+parameters <- c("EN", "log_lambda", "estp", "bF") #, "fit_data", "fit_new")#
+# MCMC法の条件設定#
+nc <- 3#
+nb <- 15000#
+ni <- 30000#
+nt <- 15#
+# MCMC法の実行#
+outnmix2 <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)#
+###計算結果の出力#
+# 要約量の計算#
+library(coda)#
+resdf2 <- as.data.frame(outnmix2$summary$all.chain)#
+GR.diag <- gelman.diag(outnmix2$samples, multivariate = FALSE)#
+resdf2$Rhat <- GR.diag$psrf[,"Point est."]#
+## MCMCトレースの作図#
+# ggplot#
+library(ggplot2)#
+library(bayesplot)#
+mcmc_trace(outnmix2$samples) +#
+ scale_color_discrete()
+library(ggplot2)#
+library(bayesplot)#
+library(patchwork)#
+p1 <- mcmc_hist(outnmix2$samples, pars="log_lambda") +#
+        geom_vline(xintercept=log_lambda)#
+p2 <- mcmc_hist(outnmix2$samples, pars="estp")+#
+        geom_vline(xintercept=p_det)+#
+        scale_x_continuous(limits=c(0,1))#
+compn <- data.frame(Setting=N,#
+                    Estimates=resdf2[grep("EN",rownames(resdf2)),2],#
+                    Lci=resdf2[grep("EN",rownames(resdf2)),4],#
+                    Uci=resdf2[grep("EN",rownames(resdf2)),5])#
+p3 <- ggplot(compn, aes(x=Setting, y=Estimates))+#
+      geom_point()+#
+      geom_abline(intercept=0, slope=1)+#
+      geom_errorbar(aes(ymin=Lci, ymax=Uci))#
+p4 <- mcmc_hist(outnmix2$samples, pars="bF")+#
+       geom_vline(xintercept=1)#
+p1 + p2 + p3 + p4#plot_layout(ncol=2)
+set.seed(1)#
+## Abundance#
+N <- 50#
+## Sampling occasion#
+Nsc <- 6#
+## Detection probability#
+p_det <- 0.3#
+## Detection history#
+y <- array(dim=c(N, Nsc))#
+for (i in 1:N) {#
+  for (k in 1:Nsc) {#
+    # 個体ごとの、各調査機会における検出不検出データの生成#
+    y[i,k] <- rbinom(1, 1, p_det)#
+  }#
+}
+y
+yobs <- y[apply(y,1,sum)>0,]
+yobs
+# Data augmentation#
+naug <- nrow(yobs)#
+M <- nrow(yobs) + naug#
+yaug <- array(0,dim=c(M,Nsc))#
+yaug[1:nrow(yobs),] <- yobs
+yaug
+# BUGS言語によるモデルの記述（演習12）#
+library(nimble)#
+modelcode <- nimbleCode(#
+{#
+# 含有率の事前分布#
+psi ~ dunif(0, 1)#
+# 個体群が調査範囲に存在するかしないかを推定#
+for (i in 1:M) {#
+    w[i] ~ dbern(psi)#
+}#
+# 検出率の事前分布#
+p_det ~ dunif(0, 1)#
+# 個体の在不在と検出率から、個体（i）かつ調査機会（j）#
+# ごとの検出履歴データを説明する#
+for (i in 1:M) {                  # 個体#
+  for (k in 1:Nsc) {              # 調査機会#
+    prob_obs[i,k] <- p_det*w[i]   # 検出可能性の予測値#
+    y[i,k] ~ dbern(prob_obs[i,k]) # データはベルヌーイ分布に従う#
+  }#
+}#
+## 導出パラメータ#
+N <- sum(w[1:M])                     # 真の個体数は在（w=1）である個体数#
+}                                 # モデルの記述はここまで#
+)#
+# BUGS言語によるモデルの記述（演習12）#
+library(nimble)#
+modelcode <- nimbleCode(#
+{#
+# 含有率の事前分布#
+psi ~ ____(___, ___)#
+# 個体群が調査範囲に存在するかしないかを推定#
+for (i in 1:M) {#
+    w[i] ~ dbern(psi)#
+}#
+# 検出率の事前分布#
+p_det ~ dunif(0, 1)#
+# 個体の在不在と検出率から、個体（i）かつ調査機会（j）#
+# ごとの検出履歴データを説明する#
+for (i in 1:M) {                     # 個体#
+  for (k in 1:Nsc) {                 # 調査機会#
+    prob_obs[i,k] <- p_det*w[i]      # 検出可能性の予測値#
+    y[i,k] ~ ____(prob_obs[i,k])     # データはベルヌーイ分布に従う#
+#    y[i,k] ~ dbin(prob_obs[i,k], 1) #上記の式と等価#
+  }#
+}#
+## 導出パラメータ#
+N <- sum(w[1:M])                     # 真の個体数は在（w=1）である個体数#
+}                                    # モデルの記述はここまで#
+)#
+# データと定数の準備#
+list_data <- list(y=yaug)#
+list_cons <- list(M=M, Nsc=Nsc)#
+# 初期値の設定#
+init1 <- list(psi=0.5, w=rep(1, list_cons$M), p_det=0.1)#
+init2 <- list(psi=0.4, w=rep(1, list_cons$M), p_det=0.05)#
+init3 <- list(psi=0.6, w=rep(1, list_cons$M), p_det=0.2)#
+inits <- list(init1, init2, init3)#
+# 監視対象パラメータの設定#
+parameters <- c("psi", "w", "p_det", "N")#
+## MCMC法の設定#
+nc <- 3#
+nb <- 1000#
+ni <- 3000#
+nt <- 2#
+# MCMC法の実行#
+out3 <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)
+# BUGS言語によるモデルの記述（演習12）#
+library(nimble)#
+modelcode <- nimbleCode(#
+{#
+# 含有率の事前分布#
+psi ~ dunif(0, 1)#
+# 個体群が調査範囲に存在するかしないかを推定#
+for (i in 1:M) {#
+    w[i] ~ dbern(psi)#
+}#
+# 検出率の事前分布#
+p_det ~ dunif(0, 1)#
+# 個体の在不在と検出率から、個体（i）かつ調査機会（j）#
+# ごとの検出履歴データを説明する#
+for (i in 1:M) {                  # 個体#
+  for (k in 1:Nsc) {              # 調査機会#
+    prob_obs[i,k] <- p_det*w[i]   # 検出可能性の予測値#
+    y[i,k] ~ dbern(prob_obs[i,k]) # データはベルヌーイ分布に従う#
+  }#
+}#
+## 導出パラメータ#
+N <- sum(w[1:M])                     # 真の個体数は在（w=1）である個体数#
+}                                 # モデルの記述はここまで#
+)
+list_data <- list(y=yaug)#
+list_cons <- list(M=M, Nsc=Nsc)#
+# 初期値の設定#
+init1 <- list(psi=0.5, w=rep(1, list_cons$M), p_det=0.1)#
+init2 <- list(psi=0.4, w=rep(1, list_cons$M), p_det=0.05)#
+init3 <- list(psi=0.6, w=rep(1, list_cons$M), p_det=0.2)#
+inits <- list(init1, init2, init3)#
+# 監視対象パラメータの設定#
+parameters <- c("psi", "w", "p_det", "N")#
+## MCMC法の設定#
+nc <- 3#
+nb <- 1000#
+ni <- 3000#
+nt <- 2#
+# MCMC法の実行#
+out3 <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)#
+# 結果の検証#
+library(coda)#
+resdf <- as.data.frame(out3$summary$all.chain)#
+GR.diag <- gelman.diag(out3$samples, multivariate = FALSE)#
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+resdf
+library(ggplot2)#
+library(bayesplot)#
+mcmc_trace(out3$samples, pars=rownames(resdf)[!grepl("w",rownames(resdf))])+#
+ scale_color_discrete()
+library(patchwork)#
+p1 <- mcmc_hist(out3$samples, pars="N")+#
+       lims(x=c(nrow(yobs), list_cons$M))+#
+       geom_vline(xintercept=c(nrow(yobs), list_cons$M), lty=2)+#
+       geom_vline(xintercept=N)#
+p2 <- mcmc_hist(out3$samples, pars="p_det")+#
+        geom_vline(xintercept=p_det)#
+p1 + p2
+library(ggplot2)#
+library(bayesplot)#
+mcmc_trace(out3$samples, pars=rownames(resdf)[!grepl("w",rownames(resdf))])+#
+ scale_color_discrete()
+library(patchwork)#
+p1 <- mcmc_hist(out3$samples, pars="N")+#
+       lims(x=c(nrow(yobs), list_cons$M))+#
+       geom_vline(xintercept=c(nrow(yobs), list_cons$M), lty=2)+#
+       geom_vline(xintercept=N)#
+p2 <- mcmc_hist(out3$samples, pars="p_det")+#
+        geom_vline(xintercept=p_det)#
+p1 + p2
+## データ拡大数の違いが推定結果に与える影響#
+# 拡大数が少ない#
+naug <- round(nrow(yobs)*0.2, digits=0)#
+M <- nrow(yobs) + naug#
+yaug <- array(0,dim=c(M,Nsc))#
+yaug[1:nrow(yobs),] <- yobs#
+list_data <- list(y=yaug)#
+list_cons <- list(M=M, Nsc=Nsc)#
+init1 <- list(psi=0.5, w=rep(1, list_cons$M), p_det=0.1)#
+init2 <- list(psi=0.4, w=rep(1, list_cons$M), p_det=0.05)#
+init3 <- list(psi=0.6, w=rep(1, list_cons$M), p_det=0.2)#
+inits <- list(init1, init2, init3)#
+out3_2 <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)
+naug <- nrow(yobs)*2#
+M <- nrow(yobs) + naug#
+yaug <- array(0,dim=c(M,Nsc))#
+yaug[1:nrow(yobs),] <- yobs#
+list_data <- list(y=yaug)#
+list_cons <- list(M=M, Nsc=Nsc)#
+init1 <- list(psi=0.5, w=rep(1, list_cons$M), p_det=0.1)#
+init2 <- list(psi=0.4, w=rep(1, list_cons$M), p_det=0.05)#
+init3 <- list(psi=0.6, w=rep(1, list_cons$M), p_det=0.2)#
+inits <- list(init1, init2, init3) #, init2, init3)#
+out3_3 <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)
+naug <- nrow(yobs)*5#
+M <- nrow(yobs) + naug#
+yaug <- array(0,dim=c(M,Nsc))#
+yaug[1:nrow(yobs),] <- yobs#
+list_data <- list(y=yaug)#
+list_cons <- list(M=M, Nsc=Nsc)#
+init1 <- list(psi=0.5, w=rep(1, list_cons$M), p_det=0.1)#
+init2 <- list(psi=0.4, w=rep(1, list_cons$M), p_det=0.05)#
+init3 <- list(psi=0.6, w=rep(1, list_cons$M), p_det=0.2)#
+inits <- list(init1, init2, init3) #, init2, init3)#
+out3_3 <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)
+# 結果の作図#
+library(ggplot2)#
+library(bayesplot)#
+p1 <- mcmc_hist(out3$samples, pars="N")+#
+       lims(x=c(nrow(yobs), nrow(yobs)*2))+#
+       geom_vline(xintercept=c(nrow(yobs), nrow(yobs)*2), lty=2)+#
+       geom_vline(xintercept=N)#
+p2 <- mcmc_hist(out3_2$samples, pars="N")+#
+       lims(x=c(nrow(yobs), nrow(yobs)*1.2))+#
+       geom_vline(xintercept=c(nrow(yobs), nrow(yobs)*1.2), lty=2)#
+p3 <- mcmc_hist(out3_3$samples, pars="N")+#
+       lims(x=c(nrow(yobs), nrow(yobs)*3))+#
+       geom_vline(xintercept=c(nrow(yobs), nrow(yobs)*3), lty=2)+#
+       geom_vline(xintercept=N)#
+compdf <- data.frame(rbind(out3$summary$all.chains[2,c(2,4,5)],#
+                           out3_2$summary$all.chains[2,c(2,4,5)],#
+                           out3_3$summary$all.chains[2,c(2,4,5)],#
+                           out3$summary$all.chains[3,c(2,4,5)],#
+                           out3_2$summary$all.chains[3,c(2,4,5)],#
+                           out3_3$summary$all.chains[3,c(2,4,5)]),#
+                     parameters=rep(c("p_det", "psi"), each=3),#
+                     degree=rep(c("2", "0.2", "3"), 2)#
+)#
+p4 <- ggplot(compdf, aes(x=degree, y=Median, color=degree))+#
+        geom_point(size=5)+#
+        geom_errorbar(aes(ymin=X95.CI_low, ymax=X95.CI_upp), width=0)+#
+        facet_wrap(~parameters)+#
+        theme(legend.position="none")#
+p1 + p2 + p3 + p4
+p1 <- mcmc_hist(out3$samples, pars="N")+#
+       lims(x=c(nrow(yobs), nrow(yobs)*2))+#
+       geom_vline(xintercept=c(nrow(yobs), nrow(yobs)*2), lty=2)+#
+       geom_vline(xintercept=N)#
+p2 <- mcmc_hist(out3_2$samples, pars="N")+#
+       lims(x=c(nrow(yobs), nrow(yobs)*1.2))+#
+       geom_vline(xintercept=c(nrow(yobs), nrow(yobs)*1.2), lty=2)+#
+       geom_vline(xintercet=N)#
+p3 <- mcmc_hist(out3_3$samples, pars="N")+#
+       lims(x=c(nrow(yobs), nrow(yobs)*3))+#
+       geom_vline(xintercept=c(nrow(yobs), nrow(yobs)*3), lty=2)+#
+       geom_vline(xintercept=N)#
+compdf <- data.frame(rbind(out3$summary$all.chains[2,c(2,4,5)],#
+                           out3_2$summary$all.chains[2,c(2,4,5)],#
+                           out3_3$summary$all.chains[2,c(2,4,5)],#
+                           out3$summary$all.chains[3,c(2,4,5)],#
+                           out3_2$summary$all.chains[3,c(2,4,5)],#
+                           out3_3$summary$all.chains[3,c(2,4,5)]),#
+                     parameters=rep(c("p_det", "psi"), each=3),#
+                     degree=rep(c("2", "0.2", "3"), 2)#
+)#
+p4 <- ggplot(compdf, aes(x=degree, y=Median, color=degree))+#
+        geom_point(size=5)+#
+        geom_errorbar(aes(ymin=X95.CI_low, ymax=X95.CI_upp), width=0)+#
+        facet_wrap(~parameters)+#
+        theme(legend.position="none")#
+p1 + p2 + p3 + p4
+p1 <- mcmc_hist(out3$samples, pars="N")+#
+       lims(x=c(nrow(yobs), nrow(yobs)*2))+#
+       geom_vline(xintercept=c(nrow(yobs), nrow(yobs)*2), lty=2)+#
+       geom_vline(xintercept=N)#
+p2 <- mcmc_hist(out3_2$samples, pars="N")+#
+       lims(x=c(nrow(yobs), nrow(yobs)*1.2))+#
+       geom_vline(xintercept=c(nrow(yobs), nrow(yobs)*1.2), lty=2)+#
+       geom_vline(xintercept=N)#
+p3 <- mcmc_hist(out3_3$samples, pars="N")+#
+       lims(x=c(nrow(yobs), nrow(yobs)*3))+#
+       geom_vline(xintercept=c(nrow(yobs), nrow(yobs)*3), lty=2)+#
+       geom_vline(xintercept=N)#
+compdf <- data.frame(rbind(out3$summary$all.chains[2,c(2,4,5)],#
+                           out3_2$summary$all.chains[2,c(2,4,5)],#
+                           out3_3$summary$all.chains[2,c(2,4,5)],#
+                           out3$summary$all.chains[3,c(2,4,5)],#
+                           out3_2$summary$all.chains[3,c(2,4,5)],#
+                           out3_3$summary$all.chains[3,c(2,4,5)]),#
+                     parameters=rep(c("p_det", "psi"), each=3),#
+                     degree=rep(c("2", "0.2", "3"), 2)#
+)#
+p4 <- ggplot(compdf, aes(x=degree, y=Median, color=degree))+#
+        geom_point(size=5)+#
+        geom_errorbar(aes(ymin=X95.CI_low, ymax=X95.CI_upp), width=0)+#
+        facet_wrap(~parameters)+#
+        theme(legend.position="none")#
+p1 + p2 + p3 + p4
+#################
+# SECR model#
+#################
+set.seed(2)#
+## 個体数を推定したい空間的な範囲を設定#
+xl <- -12#
+xu <- 12#
+yl <- -12#
+yu <- 12#
+# 推定範囲に存在する真の個体数#
+N <- 10#
+# 個体ごとの活動中心の位置の設定#
+ac_x <- runif(N, xl, xu)#
+ac_y <- runif(N, yl, yu)#
+## 調査機会数#
+Nsc <- 6#
+## カメラのID、x座標、y座標を設定#
+Cam_id <- paste("C", formatC(1:100, width=2, flag="0"), sep="")#
+cam_x <- rep(((-5):4)*2+1, 10)#
+cam_y <- rep(((-5):4)*2+1, each=10)#
+Ncam <- length(cam_x)#
+## 個体（i）、カメラ（j）、調査機会（k）ごとの撮影枚数データの生成#
+# カメラとの距離が0の場合の検出率#
+lam0 <- 0.1#
+# カメラからの距離に応じた検出率の減衰関数である#
+# 半世紀関数の分散パラメータ#
+sigma <- 1.5#
+# 各個体の活動中心と各カメラの距離を格納する箱#
+D2 <- matrix(0, ncol=Ncam, nrow=N)#
+# 検出率を格納する箱#
+lambda <- matrix(0, ncol=Ncam, nrow=N)#
+# 生成する撮影枚数データを格納する箱#
+y <- array(dim=c(N, Ncam, Nsc))#
+# 撮影枚数データの生成#
+for (i in 1:N) {        # 個体#
+  for (j in 1:Ncam) {   # カメラ#
+    # 各個体の活動中心と各カメラの距離の2乗を計算#
+    D2[i,j] <- (ac_x[i]-cam_x[j])^2 + (ac_y[i]-cam_y[j])^2#
+    # 半正規関数による、距離に応じた検出率の減衰#
+    lambda[i,j] <- lam0*exp(-D2[i,j]/(2*sigma*sigma))#
+    for (k in 1:Nsc) {  # 調査機会#
+      y[i,j,k] <- rpois(1,lambda[i,j])#
+    }#
+  }#
+}#
+# 1枚も撮影されていない個体は検出できないので、データから削除#
+yobs <- y[apply(y,1,sum)>0,,]
+# 観察個体の4倍の個体を加える#
+naug <- nrow(yobs)*4#
+M <- nrow(yobs) + naug#
+yaug <- array(0,dim=c(M,Ncam,Nsc))#
+yaug[1:nrow(yobs),,] <- yobs
+# BUGS言語によるモデルの記述#
+library(nimble)#
+modelcode <- nimbleCode(#
+{#
+# 含有率の事前分布#
+psi ~ dunif(0, 1)#
+# 個体の活動中心の位置の事前分布#
+for (i in 1:M) {#
+  AC_x[i] ~ dunif(xl, xu)#
+  AC_y[i] ~ dunif(yl, yu)#
+}#
+# 個体群が調査範囲に存在するかしないかを推定#
+for (i in 1:M) {#
+    w[i] ~  dbern(psi)#
+}#
+# 検出率の事前分布#
+lam0 ~ dunif(0, 100)#
+# 半正規関数の分散パラメータの事前分布#
+sigma ~ dunif(0, 100)#
+# 個体の在不在と、カメラからの距離に応じた検出率から、#
+# 個体（i）かつカメラ（j）かつ調査機会（k）#
+# ごとの撮影枚数データを説明する#
+for (i in 1:M) {                # 個体#
+  for (j in 1:Ncam) {           # 調査機会#
+    # カメラと活動中心の距離の2乗を計算#
+    D2[i,j] <- (AC_x[i] - cam_x[j])^2 + (AC_y[i] - cam_y[j])^2#
+    # 半正規関数による距離に応じた検出率#
+    mu[i,j] <- lam0*exp(-D2[i,j]/(2*(sigma^2)))*w[i]#
+    for (k in 1:Nsc) {#
+      y[i,j,k] ~ dpois(mu[i,j]) # データはポアソン分布に従う#
+    }#
+  }#
+}#
+## 導出パラメータ#
+N <- sum(w[1:M])                   # 真の個体数は在（w=1）である個体数#
+D <- N/((xu-xl)*(yu-yl))        # 個体密度はN/調査範囲#
+}                               # モデルの記述はここまで#
+)
+# データの準備#
+list_data <- list(y=yaug)#
+list_cons <- list(M=M, Ncam=Ncam, Nsc=Nsc,#
+                  cam_x=cam_x, cam_y=cam_y, xl=xl, xu=xu, yl=yl, yu=yu#
+)#
+# Initial values#
+init1 <- list(sigma=2, psi=0.5,#
+  AC_x=runif(list_cons$M, list_cons$xl, list_cons$xu),#
+  AC_y=runif(list_cons$M, list_cons$yl, list_cons$yu),#
+  w=rep(1, list_cons$M), lam0=0.1#
+)#
+init2 <- list(sigma=1, psi=0.4,#
+  AC_x=runif(list_cons$M, list_cons$xl, list_cons$xu),#
+  AC_y=runif(list_cons$M, list_cons$yl, list_cons$yu),#
+  w=rep(1, list_cons$M), lam0=0.05#
+)#
+init3 <- list(sigma=4, psi=0.6,#
+  AC_x=runif(list_cons$M, list_cons$xl, list_cons$xu),#
+  AC_y=runif(list_cons$M, list_cons$yl, list_cons$yu),#
+  w=rep(1, list_cons$M), lam0=0.2#
+)#
+inits <- list(init1, init2, init3)#
+parameters <- c("sigma", "psi", "AC_x", "AC_y", "w", "lam0", "N", "D")#
+nc <- 3#
+ni <- 3000#
+nb <- 1000#
+nt <- 2#
+out4 <- nimbleMCMC(code=modelcode,#
+                  data=list_data,#
+                  constants=list_cons,#
+                  inits=inits,#
+                  monitors=parameters,#
+                  niter = ni,#
+                  nburnin = nb,#
+                  thin = nt,#
+                  nchains = nc,#
+                  progressBar = TRUE,#
+                  samplesAsCodaMCMC = TRUE,#
+                  summary = TRUE,#
+                  WAIC = FALSE#
+)#
+# 結果の検証#
+library(coda)#
+resdf <- as.data.frame(out4$summary$all.chain)#
+GR.diag <- gelman.diag(out4$samples, multivariate = FALSE)#
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+resdf
+library(ggplot2)#
+library(bayesplot)#
+mcmc_trace(out4$samples, pars=rownames(resdf)[!(grepl("w",rownames(resdf)) | grepl("AC",rownames(resdf)))])+#
+ scale_color_discrete()
+library(patchwork)#
+p1 <- mcmc_hist(out4$samples, pars="N")+#
+       lims(x=c(nrow(yobs), list_cons$M))+#
+       geom_vline(xintercept=c(nrow(yobs), list_cons$M), lty=2)#
+p2 <- mcmc_hist(out4$samples, pars="D")+#
+        geom_vline(xintercept=N/((xu-xl)*(yu-yl)))#
+p3 <- mcmc_hist(out4$samples, pars="lam0")+#
+        geom_vline(xintercept=lam0)#
+p4 <- mcmc_hist(out4$samples, pars="sigma")+#
+        geom_vline(xintercept=sigma)#
+p1 + p2 + p3 + p4
+par(mfrow=c(1,1))#
+plot(1, xlim=c(xl, xu), ylim=c(yl, yu), type="n",#
+     xlab="X grid (km)", ylab="Y grid (km)"#
+)#
+rect(xl, yl, xu, yu, lty=2)#
+#points(cam_x, cam_y, pch=1, cex=2)#
+points(ac_x, ac_y, pch=c(0,15)[as.numeric(apply(y,1,sum)>0)+1], col="red", cex=2)#
+estx <- outSECR$summary[grep("AC_x", rownames(outSECR$summary))[1:nrow(yobs)], ]#
+esty <- outSECR$summary[grep("AC_y", rownames(outSECR$summary))[1:nrow(yobs)], ]#
+points(estx[, 5], esty[, 5], pch=1, col="black", cex=2)#
+arrows(estx[, 3], esty[, 5], estx[, 7], esty[, 5], code=3, angle=90, length=0.1)#
+arrows(estx[, 5], esty[, 3], estx[, 5], esty[, 7], code=3, angle=90, length=0.1)
+par(mfrow=c(1,1))#
+plot(1, xlim=c(xl, xu), ylim=c(yl, yu), type="n",#
+     xlab="X grid (km)", ylab="Y grid (km)"#
+)#
+rect(xl, yl, xu, yu, lty=2)#
+#points(cam_x, cam_y, pch=1, cex=2)#
+points(ac_x, ac_y, pch=c(0,15)[as.numeric(apply(y,1,sum)>0)+1], col="red", cex=2)#
+estx <- out4$summary[grep("AC_x", rownames(out4$summary))[1:nrow(yobs)], ]#
+esty <- out4$summary[grep("AC_y", rownames(out4$summary))[1:nrow(yobs)], ]#
+points(estx[, 5], esty[, 5], pch=1, col="black", cex=2)#
+arrows(estx[, 3], esty[, 5], estx[, 7], esty[, 5], code=3, angle=90, length=0.1)#
+arrows(estx[, 5], esty[, 3], estx[, 5], esty[, 7], code=3, angle=90, length=0.1)
+names(out4)
+names(out4$summary)
+head(out4$summary)
+head(out4$summary$all.chains)
+estx <- out4$summary$all.chains[grep("AC_x", rownames(out4$summary$all.chains))[1:nrow(yobs)], ]#
+esty <- out4$summary$all.chains[grep("AC_y", rownames(out4$summary$all.chains))[1:nrow(yobs)], ]#
+points(estx[, 5], esty[, 5], pch=1, col="black", cex=2)#
+arrows(estx[, 3], esty[, 5], estx[, 7], esty[, 5], code=3, angle=90, length=0.1)#
+arrows(estx[, 5], esty[, 3], estx[, 5], esty[, 7], code=3, angle=90, length=0.1)
+head(estx)
+points(estx[, 2], esty[, 2], pch=1, col="black", cex=2)
+arrows(estx[, 4], esty[, 2], estx[, 5], esty[, 2], code=3, angle=90, length=0.1)#
+arrows(estx[, 2], esty[, 4], estx[, 2], esty[, 5], code=3, angle=90, length=0.1)
+0.95*0.95
+0.95*0.95*0.95
+4*3/2
+0.05/6
+q()
+mean(c(3.9,6))
+mean(c(39,50))
+q()
+15/sqrt(2)
+mean(c(16,12,10))
+q()
+mean(c(17.5, 39.5))
+q()
+library(tidyverse)
+library(stringi)
+char1 <- "山梨森林管理事務所, やまなししんりんじむしょ, yamanashi, 1530_は-01"#
+str_extract(char1, "\\p{Script=Han}")
+str_extract(char1, "\\p{Script=Han}+")
+str_extract(char1, "[a-zA-Z]")
+str_extract(char1, "[a-zA-Z]+")#
+str_extract(char1, "^[^ ]+")
+str_extract(char1, "^[^ ]+(?=\\,)")
+str_extract(char1, "¥¥w")
+str_extract(char1, "\\w")
+str_extract(char1, "\\w+")
+str_extract(char1, "\\p{Script=Hiragana}")
+char1 <- "山梨森林管理事務所, やまなししんりんかんりじむしょ, yamanashi, 1530_は-01"
+str_extract(char1, "\\p{Script=Hiragana}+")
+str_extract(char1, "(?<=\\_)\\p{Script=Hiragana}")
+str_extract(char1, "\\d{1,9}(?=\\_)")
+q()
+！setwd("/Users/hayatoiijima/Library/CloudStorage/Box-Box/stat_lec_rev/2_gis/")#
+library(here)#
+library(tidyverse)#
+library(sf)#
+library(stars)#
+library(readxl)#
+# データの読み込みと操作#
+## 自分のデータ#
+# 自分のデータから起こす場合#
+standloc <- read_excel("/Users/hayatoiijima/Library/CloudStorage/Box-Box/stat_lec_rev/1_basic/データ.xlsx", sheet="Stand") %>%#
+  st_as_sf(., coords=c("Lon", "Lat"), crs=4326)
+q()
+library(pastclim)
+?filenames_chelsa_trace21k
+filenames_chelsa_trace21k(c("bio01", "bio05", "bio06", "bio12", "bio13", "bio14"))
+filenames_chelsa_trace21k(bio_var=c("bio01", "bio05", "bio06", "bio12", "bio13", "bio14"))
+filenames_chelsa_trace21k(dataset="CHELSA_trace21k_1.0_0.5m_vsi", bio_var=c("bio01", "bio05", "bio06", "bio12", "bio13", "bio14"))
+pastclim::filenames_chelsa_trace21k(dataset="CHELSA_trace21k_1.0_0.5m_vsi", bio_var=c("bio01", "bio05", "bio06", "bio12", "bio13", "bio14"))
+ls("package:pastclim")
+?download_chelsa_trace21k
+download_dataset("CHELSA_trace21k_1.0_0.5m_vsi_vis",#
+  bio_variables = c("bio01", "bio05", "bio06", "bio12", "bio13", "bio14"))
+download_dataset("CHELSA_trace21k_1.0_0.5m_vsi",#
+  bio_variables = c("bio01", "bio05", "bio06", "bio12", "bio13", "bio14"))
+?gdal_utils
+download_dataset
+tiffs_path <- system.file("/Users/hayatoiijima/pastclim_local", package = "pastclim")
+tiffs_path
+list_of_tiffs <- file.path(tiffs_path, dir(tiffs_path))
+list_of_tiffs
+?system.file
+?file.path
+tiffs_path <- "/Users/hayatoiijima/pastclim_local"
+list_of_tiffs <- file.path(tiffs_path, dir(tiffs_path))
+list_of_tiffs
+bio01 <- terra::rast(list_of_tiffs)
+bio01
+time_bp(bio01) <- c(0, -100, -200)#
+names(bio01) <- paste("bio01", terra::time(bio01), sep = "_")
+time_bp(bio01) <- c(0)#
+names(bio01) <- paste("bio01", terra::time(bio01), sep = "_")
+bio01
+tempdir()
+nc_name <- file.path(tempdir(), "CHELSA_TraCE21k_bio01.nc")
+nc_name
+terra::writeCDF(bio01,#
+  filename = nc_name, varname = "bio01",#
+  compression = 9, overwrite = TRUE#
+)
+custom_series <- region_series(#
+  bio_variables = "bio01",#
+  dataset = "custom",#
+  path_to_nc = nc_name#
+)
+custom_series
+plot(custom_series)
+get_time_bp_steps(dataset = "custom", path_to_nc = nc_name)
+terra::plot(custom_series)
+climate_100 <- slice_region_series(custom_series, time_bp = 0)
+terra::plot(climate_100)
+q()
+library(stars)
+d <- read_raster("/Users/hayatoiijima/pastclim_local/CHELSA_TraCE21k_bio01_-11_V1.0.tif")
+d <- read_stars("/Users/hayatoiijima/pastclim_local/CHELSA_TraCE21k_bio01_-11_V1.0.tif")
+d
+library(terra)
+d <- rast("/Users/hayatoiijima/pastclim_local/CHELSA_TraCE21k_bio01_-11_V1.0.tif")
+d
+q()
+library(rmarkdown)
+library(bookdown)
+render(input="/Users/hayatoiijima/Library/CloudStorage/Box-Box/stat_lec_rev/5_report/report.Rmd")
+library(knitr)
+render(input="/Users/hayatoiijima/Library/CloudStorage/Box-Box/stat_lec_rev/5_report/report.Rmd")
+?kable
+q()
+?file.path
+q()
+#---------------------------##
+# 統計講義資料#
+# 1. 基礎#
+#---------------------------##
+##
+#---------------------------##
+# 事前の準備#
+#---------------------------##
+# 基本ディレクトリの設定#
+setwd(file.path(path.expand("~"), "Library", "CloudStorage", "Box-Box", "stat_lec_rev"))#
+# 資料用としては#
+#setwd(file.path(path.expand("~"), "R_stat"))#
+# パッケージの読み込み#
+library(here)#
+library(tidyverse)#
+library(readxl)#
+library(writexl)#
+library(patchwork)#
+library(stringi)#
+#library(openxlsx)#
+#---------------------------##
+# データの読み込みおよび操作#
+#---------------------------##
+# 毎木データ#
+treedf <- read_excel(here("data", "データ.xlsx"), sheet="Trees")
+1:10
+cam_files <- list.files(here(file.path("data", "camera")),#
+recursive=TRUE, pattern="*.xlsx")
+cam_files
+here()
+getwd()
+cam_files <- list.files(getwd(),#
+recursive=TRUE, pattern="*.xlsx")q()
+q()
