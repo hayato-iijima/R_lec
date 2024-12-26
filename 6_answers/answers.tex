@@ -1,0 +1,364 @@
+%\documentclass{jsarticle}
+%\AtBeginDvi{\special{pdf:tounicode 90ms-RKSJ-UCS2}}
+%\pagestyle{myheadings}
+%\usepackage[dvipdfm]{hyperref}
+%\usepackage{ascmac}
+%\usepackage{graphicx}
+%\usepackage{booktabs}
+%\usepackage{amsmath,amssymb}
+%\usepackage{makeidx}
+%\makeindex
+%\begin{document}
+
+%\title{Rの操作と統計解析の基礎}
+%\author{飯島勇人\footnote{（国研）森林総合研究所野生動物研究領域}
+%\footnote{連絡先: hayato.iijima@gmail.comまたはhayatoi@affrc.go.jp}}
+%\maketitle
+%\markright{Rによる統計解析}
+%\tableofcontents
+
+\part{演習の答え}
+\label{answers}
+\section*{\ref{basic}部の演習}
+    \subsubsection*{演習\ref{exer:reframe1}：プロットかつ種ごとの出現個体数の計算}
+\begin{verbatim}
+treedf %>%
+  group_by(Region, Stand, Species) %>%
+  reframe(個体数=n())
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:mutate1}：個体ごとの段面積の計算}
+\begin{verbatim}
+treedf %>%
+  mutate(断面積=3.14*(DBH/100/2)^2)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:mutate2}：毎木プロットごとの胸高断面積合計の計算}
+\begin{verbatim}
+treedf %>%
+  mutate(断面積=3.14*(DBH/100/2)^2) %>%
+  group_by(Region, Stand) %>%
+  reframe(断面積合計=sum(断面積)/(20*20)*100*100)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:mutate3}：断面積を計算して新しい列として付与する}
+\begin{verbatim}
+treedf <- treedf %>%
+  mutate(断面積=(DBH/2)^{2}*pi)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:reframe2}：種ごとの平均DBHを計算する}
+\begin{verbatim}
+treedf %>%
+  group_by(Species) %>%
+  reframe(平均DBH=mean(DBH))
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:strc1}：RegionとStandの結合}
+\begin{verbatim}
+treedf %>%
+  mutate(Plotid=str_c(Region, Stand, sep="_"))
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:strreplace1}：文字列の置換}
+\begin{verbatim}
+treedf %>%
+  mutate(Sp2=str_replace(Species, "Genus_species", "")) %>%
+  # 以下は、単に表示のためで、本来は不要
+  select(Species, Sp2)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:strextract1}：一連のひらがなの抽出}
+\begin{verbatim}
+str_extract(char1, "\\p{Script=Hiragana}+")
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:stritransgeneral1}：全角から半角}
+\begin{verbatim}
+stri_trans_general(J_text, "Fullwidth-Halfwidth")
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:innerjoin1}：Standをキーにしてデータを結合する}
+\begin{verbatim}
+treedf <- treedf %>%
+  inner_join(., standinfo, by=c("Region", "Stand"))
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:reframe3}：ニホンジカの撮影枚数をRegion単位で集約する}
+\begin{verbatim}
+deerphoto <- cam_df %>%
+  filter(str_detect(species, "deer")) %>%
+  group_by(Region) %>%
+  reframe(Deer=sum(count))
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:innerjoin2}：一致データのみを結合}
+\begin{verbatim}
+treedf <- treedf %>%
+  inner_join(., deerphoto, by="Region")
+\end{verbatim}
+
+\section*{\ref{gis}部の演習}
+    \subsubsection*{演習\ref{exer:stcoordinates1}：一致データのみを結合}
+\begin{verbatim}
+standloc %>%
+  mutate(lon=st_coordinates(.)[,1], lat=st_coordinates(.)[,2])
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:sttransform1}：座標参照系の変換}
+\begin{verbatim}
+yama <- yama %>%
+  st_transform(., crs=6676)
+standloc <- standloc %>%
+  st_transform(., crs=6676)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:stbuffer1}：半径500mのバッファを作る}
+\begin{verbatim}
+standloc2 <- standloc %>%
+  st_transform(., crs=6676) %>%
+  st_buffer(., dist=500)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:sttransform2}：座標参照系を6676に変更}
+\begin{verbatim}
+lu <- lu %>%
+  st_transform(., crs=6676)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:stintersection1}：ベクタファイル同士の結合}
+\begin{verbatim}
+standloc2 <- standloc2 %>%
+  st_intersection(., lu)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:reframe4}：土地利用種ごとのデータ数の計算}
+\begin{verbatim}
+landuseratio <- standloc2 %>%
+  group_by(Region, Stand, lu) %>%
+  reframe(Landuse=n())
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:mutate4}：プロットごとの土地利用種の割合の計算}
+\begin{verbatim}
+landuseratio <- landuseratio %>%
+  group_by(Region, Stand) %>%
+  mutate(LanduseRatio=Landuse/sum(Landuse))
+\end{verbatim}
+
+\section*{\ref{statglm}部の演習}
+    \subsubsection*{演習\ref{exer:rnorm1}：正規乱数の生成}
+\begin{verbatim}
+hist(rnorm(10000, -1, 3))
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:rbinom1}：二項乱数の生成}
+\begin{verbatim}
+rbinom(100, 1, 0.5)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:rpois1}：ポアソン乱数の生成}
+\begin{verbatim}
+rpois(100, 5)
+\end{verbatim}
+
+\section*{\ref{stathm}部の演習}
+    \subsubsection*{演習\ref{exer:nmix_ex1}：BUGS言語による二項混合モデルの記述}
+\begin{verbatim}
+# BUGS言語によるモデルの記述
+library(nimble)
+modelcode <- nimbleCode(
+{
+# 過程モデル
+for (i in 1:Nsite) {
+  # 調査箇所ごとの局所個体数は
+  # 平均個体数からポアソン分布に従って得られる
+  EN[i] ~ dpois(meanN)
+}
+# 平均個体数の事前分布
+meanN ~ dunif(0, 1000)
+
+# 観測モデル
+# 検出率の事前分布
+estp ~ dunif(0, 1)
+for (i in 1:Nsite) {        # 調査箇所
+  for (j in 1:Nrep) {       # 調査機会
+    # 調査箇所（i）かつ調査機会（j）ごとの計数値
+    y[j, i] ~ dbin(estp, EN[i])
+  }
+}
+} #モデルの記述はここまで
+)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:nmix_ex2}：二項混合モデルのためのデータの準備}
+\begin{verbatim}
+list_data <- list(y=y)
+list_cons <- list(Nsite=Nsite, Nrep=Nrep)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:nmix_ex3}：反復調査回数を増加させた状況での二項混合モデルによる個体数推定}
+\begin{verbatim}
+#データの生成
+set.seed(1)
+# 調査箇所数
+Nsite <- 25
+# 調査機会数
+Nrep <- 20
+# 検出率の平均
+p_det <- 0.6
+# 平均個体群サイズlambda
+lambda <- 30
+# 過程モデルに従って局所個体数を生成
+N <- rpois(Nsite, lambda)
+# 調査箇所（i）かつ調査機会ごとの係数値を格納する箱
+y <- matrix(NA, nrow=Nrep, ncol=Nsite)
+# 調査箇所（i）かつ調査機会ごとの係数値を生成
+for (i in 1:Nsite) {
+  y[, i] <- rbinom(Nrep, N[i], p_det)
+}
+
+# モデル自体は先ほどと変わらないので、生成する必要はない
+
+#データを用意する
+list_data <- list(y=y)
+list_cons <- list(Nsite=Nsite, Nrep=Nrep)
+
+#初期値を与える
+init1 <- list(EN=rpois(Nsite, lambda)+10, meanN=lambda+10, estp=0.5)
+init2 <- list(EN=rpois(Nsite, lambda)+8, meanN=lambda+8, estp=0.9)
+init3 <- list(EN=rpois(Nsite, lambda)+15, meanN=lambda+15, estp=0.7)
+inits <- list(init1, init2, init3)
+
+#監視対象パラメータを設定する
+parameters <- c("EN", "meanN", "estp") #, "fit_data", "fit_new")
+
+## MCMC法の設定
+nc <- 3
+nb <- 10000
+ni <- 20000
+nt <- 10
+
+# MCMC法の実行
+outnmix <- nimbleMCMC(code=modelcode,
+                  data=list_data,
+                  constants=list_cons,
+                  inits=inits,
+                  monitors=parameters,
+                  niter = ni,
+                  nburnin = nb,
+                  thin = nt,
+                  nchains = nc,
+                  progressBar = TRUE,
+                  samplesAsCodaMCMC = TRUE,
+                  summary = TRUE,
+                  WAIC = FALSE
+)
+
+###計算結果の出力
+# 要約量の計算
+library(coda)
+resdf <- as.data.frame(outnmix$summary$all.chain)
+GR.diag <- gelman.diag(outnmix$samples, multivariate = FALSE)
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:nmix_ex4}：共変量で局所個体数をモデル化した二項混合モデルによる個体数推定}
+\begin{verbatim}
+library(nimble)
+modelcode <- nimbleCode(
+{
+# 過程モデル
+for (i in 1:Nsite) {
+  # 調査箇所ごとの局所個体数は
+  # 箇所の食物量と平均の個体数量で決まる
+  log(lambda[i]) <- log_lambda + bF*food[i]
+  EN[i] ~ dpois(lambda[i])
+}
+# 対数尺度での平均個体数の事前分布
+log_lambda ~ dnorm(0.0, 1.0E-3)
+# 食物量の係数
+bF ~ dnorm(0.0, 1.0E-3)
+
+# 観測モデル
+# 検出率の事前分布
+estp ~ dunif(0, 1)
+for (i in 1:Nsite) {        # 調査箇所
+  for (j in 1:Nrep) {       # 調査機会
+    # 調査箇所（i）かつ調査機会（j）ごとの係数値
+    y[j, i] ~ dbin(estp, EN[i])
+  }
+}
+} #モデルの記述はここまで
+)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:cr_ex1}：BUGS言語による捕獲再捕獲モデルの記述}
+\begin{verbatim}
+library(nimble)
+modelcode <- nimbleCode(
+{
+# 含有率の事前分布
+psi ~ dunif(0, 1)
+# 個体群が調査範囲に存在するかしないかを推定
+for (i in 1:M) {
+    w[i] ~ dbern(psi)
+}
+# 検出率の事前分布
+p_det ~ dunif(0, 1)
+# 個体の在不在と検出率から、個体（i）かつ調査機会（j）
+# ごとの検出履歴データを説明する
+for (i in 1:M) {                     # 個体
+  for (k in 1:Nsc) {                 # 調査機会
+    prob_obs[i,k] <- p_det*w[i]      # 検出可能性の予測値
+    y[i,k] ~ dbern(prob_obs[i,k])     # データはベルヌーイ分布に従う
+#    y[i,k] ~ dbin(prob_obs[i,k], 1) #上記の式と等価
+  }
+}
+## 導出パラメータ
+N <- sum(w[1:M])                     # 真の個体数は在（w=1）である個体数
+}                                    # モデルの記述はここまで
+)
+\end{verbatim}
+
+    \subsubsection*{演習\ref{exer:secr_ex1}：BUGS言語による空間明示捕獲再捕獲モデルの記述}
+\begin{verbatim}
+library(nimble)
+modelcode <- nimbleCode(
+{
+# 含有率の事前分布
+psi ~ dunif(0, 1)
+# 個体の活動中心の位置の事前分布
+for (i in 1:M) {
+  AC_x[i] ~ dunif(xl, xu)
+  AC_y[i] ~ dunif(yl, yu)
+}
+# 個体群が調査範囲に存在するかしないかを推定
+for (i in 1:M) {
+    w[i] ~  dbern(psi)
+}
+
+# 検出率の事前分布
+lam0 ~ dunif(0, 100)
+# 半正規関数の分散パラメータの事前分布
+sigma ~ dunif(0, 100)
+# 個体の在不在と、カメラからの距離に応じた検出率から、
+# 個体（i）かつカメラ（j）かつ調査機会（k）
+# ごとの撮影枚数データを説明する
+for (i in 1:M) {                # 個体
+  for (j in 1:Ncam) {           # カメラ
+    # カメラと活動中心の距離の2乗を計算
+    D2[i,j] <- (AC_x[i] - cam_x[j])^2 + (AC_y[i] - cam_y[j])^2
+    # 半正規関数による距離に応じた検出率
+    mu[i,j] <- lam0*exp(-D2[i,j]/(2*(sigma^2)))*w[i]
+    for (k in 1:Nsc) {
+      y[i,j,k] ~ dpois(mu[i,j]) # データはポアソン分布に従う
+    }
+  }
+}
+## 導出パラメータ
+N <- sum(w[1:M])                   # 真の個体数は在（w=1）である個体数
+D <- N/((xu-xl)*(yu-yl))        # 個体密度はN/調査範囲
+}                               # モデルの記述はここまで
+)
+\end{verbatim}

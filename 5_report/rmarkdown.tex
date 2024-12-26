@@ -1,0 +1,172 @@
+\part{Rmarkdownによる簡易レポート作成}
+\label{rmarkdown}
+\section{はじめに}
+\verb|R|を使って図を書いたり解析を行った後、通常それらは論文や報告書などに挿入する必要があります。しかし、図をわざわざ貼り直したりするのは手間ですし、\verb|R|で出力された推定値を目で見ながら書き写すと間違いが生じるかもしれません。
+
+近年、マークダウンと呼ばれる記法が普及しています。これは、細かい装飾などの機能を省き、その代わりに簡易な記号で階層構造を持った文書を作成できる記法です。マークダウンはgithubなどで使われていますが、それを\verb|R|のコードと並列で表記して文章を作れるようにしたものがRmarkdownです。
+上記の通り、あまり凝った文章は作成できませんが、\verb|R|でデータ操作、作図、解析などを行いつつ、その結果がそのまま文章として作成できるので、簡易的なレポートなどを作成には有用です。
+
+Rmarkdownは、Pandocというシステムを利用し、pdfなど様々な形式で文書を出力することができます。ですが、本資料ではWordの出力に絞って説明を行います（というか白状すると、飯島はそれほどRmakdownに詳しくありません...）。Pandocは\texttt{R}とは別なので、PandocのHP\url{https://pandoc.org/installing.html}からダウンロード、インストールして下さい。
+
+\section{Rmarkdownによる文書の基本}
+\subsection{文書作成の手順}
+Rmarkdownでは、以下の手順で文書を出力します。
+\begin{itemize}
+  \item 文章や、図などを生成するRのコードを記載したテキストファイルを作成する（拡張子をRmdとする）
+  \item Rで、上記で作成したRmarkdownファイルから文章を作る命令を出す
+\end{itemize}
+
+前者のテキストファイルを作成する上で重要になるのが、「マークダウン記法」、「チャンク」、 「yamlヘッダ」の理解です。これらについて、順に解説します。
+
+    \subsection{マークダウン記法}
+\index{まーくだうんきほう@マークダウン記法}マークダウン記法は、簡単な記号で文書の体裁を整えることを可能にする記法です。主な記号は、以下のとおりです。
+
+\begin{description}
+  \item[\texttt{\#}]見出し記号。この記号の後に書かれた内容は、見出しになる。1〜4個の範囲で使用でき、数が多くなるほどより小さい見出しになる。
+  \item[\texttt{-}]箇条書き記号。この記号の後に書かれた内容は、箇条書きになる。この記号の前に半角スペースを4つ入れると、インデントされる。
+  \item[1.]数字の箇条書き記号。この記号の後に書かれた内容は、数字付きの箇条書きになる。
+  \item[\texttt{\$}]数式記号。この記号に挟まれた部分は数式として評価される。数式の記法は\LaTeX とほぼ同じ（\LaTeX については今回は説明しません。すいません）。
+  \item[\texttt{```}]この記号（バックチック$\times$3）で挟まれた部分は、記述したそのままが出力される。プログラムのコードなどを書くのに便利。
+\end{description}
+
+    \subsubsection{見出し}
+これは非常に便利です。
+\begin{verbatim}
+# 材料と方法
+## 調査地
+\end{verbatim}
+と記述すると、以下のように出力されます。
+\section*{材料と方法}
+\subsection*{調査地}
+    \subsubsection{箇条書き}
+\begin{verbatim}
+- 材料と方法
+    - 調査地
+\end{verbatim}
+と記述すると、以下のように出力されます。
+\begin{itemize}
+  \item 材料と方法
+  \begin{itemize}
+  \item  調査地
+  \end{itemize}
+\end{itemize}
+
+    \subsubsection{番号付き箇条書き}
+\begin{verbatim}
+1. 材料と方法
+    1. 調査地
+\end{verbatim}
+と記述すると、以下のように出力されます。
+\begin{enumerate}
+  \item 材料と方法
+  \begin{enumerate}
+  \item  調査地
+  \end{enumerate}
+\end{enumerate}
+
+    \subsubsection{数式}
+\begin{verbatim}
+$y_{i} \sim \mathrm{N}(\mu_{i], \sigma^{2})$
+\end{verbatim}
+と記述すると、以下のように出力されます。
+\begin{equation}
+y_{i} \sim \mathrm{N}(\mu_{i}, \sigma^{2}) \notag
+\end{equation}
+
+    \subsubsection{そのまま表示}
+\begin{verbatim}
+```
+y_{i} ~ dnorm(mu[i], tau)
+```
+\end{verbatim}
+と記述すると、以下のように出力されます。
+\begin{verbatim}
+y_{i} ~ dnorm(mu[i], tau)
+\end{verbatim}
+
+  \subsection{チャンク}
+\index{ちゃんく@チャンク}チャンクとは、\verb|R|のコードを記述する部分のことです。基本的な記法は、以下の通りです。
+\begin{itembox}[l]{チャンクの記法}
+\begin{verbatim}
+```{r, チャンクの名称}
+#ここにRのコードを書く
+```
+\end{verbatim}
+\end{itembox}
+以上の通り、チャンクで囲った部分はRの世界、それ以外の部分はマークダウン記法の文書となります。また、チャンクのヘッダ部分は、以下のいずれかの引数を使うことができます。
+
+\begin{description}
+  \item[echo]コードを、結果のレポートに表示させるか（コードはこの引数に関わらず実行される）
+  \item[eval]コードを実行するか
+  \item[include]コードを、結果のレポートに含めるか（FALSEにすると、実行されるがコードは表示されず、またその結果生成される図なども表示しない）
+  \item[warning]コードを実行した際にRが出力する警告を出力するかどうか
+\end{description}
+
+ヘッダの設定については、チャンクごとに設定もできますが、よく使う設定については最初のチャンク内で\index{optschunk@\texttt{opts\_chunk()}}\texttt{opts\_chunk}関数で以下のように記述しておくと、全てのチャンクに適用されるので便利です（この例では、Rが出力するメッセージと警告を表示しないようにしています）。
+\begin{verbatim}
+knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE)
+\end{verbatim}
+
+チャンクの名称は、チャンクを識別するのに用います。名称を設定すると、本文中でそのチャンク内で作られた図や表の番号を自動で参照できます。
+そのため、図や表を生成する部分のコードは、それぞれ独立したチャンクに記述します。具体的には、以下のとおりです。
+
+\begin{itembox}[l]{図を作るチャンクの記法}
+\begin{verbatim}
+```{r, チャンクの名称, fig.cap="図の表題"}
+#ここに作図するRのコードを書く
+```
+\end{verbatim}
+\end{itembox}
+
+\begin{itembox}[l]{表を作るチャンクの記法}
+\begin{verbatim}
+```{r, チャンクの名称}
+#ここに表を作るRのコードを書く
+knitr::kable(表の元となるデータ, format="pandoc",
+  col.names="ここで説明を指定できます",
+  digits=出力する数字の桁を指定できます,
+  caption = "表題")
+```
+\end{verbatim}
+\end{itembox}
+
+一方、本文中で図や表の番号を参照するためには、\verb|図 \@ref(fig:図を生成したチャンクの名称)|、\verb|表 \@ref(tab:表を生成したチャンクの名称)|と記述します。
+
+   \subsubsection{チャンク外でのRの結果の参照}
+\verb|`r ここにRのコードなり変数とか`|を使います。\verb|`|は\verb|'|（クオーテーション）と似ていますが、バックチックという別の記号ですので、注意して下さい。使い所としては、Rで推定された係数や個体数推定値などを本文中に記載するといったことが考えられます。
+
+    \subsection{yamlヘッダ}
+\index{yamlへっだ@\texttt{yaml}ヘッダ}こちらは文章の内容ではなく、出力するファイルの形式などに関する「設定」です。上記の通り、ここではWordファイルを出力するために必要な点に絞って解説します。
+
+名前にあるように、中身の文章を書く前の一番上に記載します。簡単な例を、以下に示します。
+\begin{verbatim}
+---
+title: "rmarkdownによる簡易レポート"
+author: "飯島 勇人"
+date: "`r format(Sys.time(), '%Y/%m/%d')`"
+output:
+  bookdown::word_document2:
+    number_sections: false
+---
+\end{verbatim}
+
+outputのところで、出力するファイル形式を選択します。Wordで出力する場合は\verb|word_document|なのですが、上記のように相互参照の機能を使うためのbookdownパッケージを使うので、それ専用の形式を指定します。また、標準では見出しに番号が振られるので、\verb|number_sections: false|で番号が振られないようにしています。
+
+先頭の半角空白2つはインデントで、これがないと正しく認識されないので注意して下さい。
+
+  \subsection{文書の出力方法}
+上記を参考に、自分で作成した内容をテキストファイルなどに打ち込み、拡張子を\verb|.Rmd|として保存します（サンプルファイル\verb|report.Rmd|を配布します）。注意点として、Rmdファイル内で\texttt{R}にデータを読ませたり作図したりしますが、そのための作業ディレクトリの指定などはRmdに書かれた内容で正確に動作しなければならないということです。そのため、Rmdに限っては、作業ディレクトリの指定は、コマンドで行う必要があります。
+
+上記の点を確認できたら、\verb|R|を立ち上げ、以下のコードを走らせることで、文書が出力されます。
+\index{rmarkdown@rmarkdownパッケージ}\index{bookdown@bookdownパッケージ}\index{knitr@knitrパッケージ}
+\begin{itembox}[l]{Rmdファイルから文書を作るコード}
+\begin{verbatim}
+library(rmarkdown)
+library(bookdown)
+library(knitr)
+render(input="report.Rmd")
+\end{verbatim}
+\end{itembox}
+
+上記の例では\verb|report.Rmd|までのパスを明示的に指定していませんが、ホームディレクトリ以外にある場合は、\verb|R|を立ち上げた後に作業ディレクトリをRmdファイルのある場所に変更するか、\index{render@\texttt{render()}}\texttt{render}関数でファイルまでのフルパスを指定して下さい。
+

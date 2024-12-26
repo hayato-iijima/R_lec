@@ -1,0 +1,463 @@
+\part{Rにおける地理情報データの扱い}
+\label{gis}
+\section{はじめに}
+\ref{gis}部では、地理情報データ（いわゆるベクタデータやラスタデータ）を\verb|R|で扱う方法について説明します。近年、様々な地理情報データがオープンデータとして公開されており、生態学の分野で活用されています。
+
+地理情報データは地理情報システム（GIS）ソフトで扱うというイメージがあるかも知れませんが、\verb|R|でも扱うことが可能です。\verb|R|で扱う利点として、解析のログが残ること、他のデータとの結合が容易であることが挙げられます。
+
+  \subsection{\ref{gis}部の事前準備}
+以下のコマンドを実行しておきましょう。
+\begin{verbatim}
+# 作業ディレクトリの設定
+## GUIを使う方はここで指定
+## コマンドで指定する
+### 絶対パス版
+setwd("/Users/hayatoiijima/Library/CloudStorage/Box-Box/R_lec")
+### 相対パス版
+setwd(file.path(path.expand("~"), "Library", "CloudStorage", "Box-Box", "R_lec"))
+# パッケージの読み込み
+library(here)
+library(tidyverse)
+library(readxl)
+\end{verbatim}
+
+\section{データの入手}
+地理情報データは、自分で作成することもありますし、上記のような既存のオープンデータを使うこともあります。自分で作成する場合、位置情報（緯度経度など）が必須です。
+
+一方、代表的な既存データとして、以下のものがあります。
+
+\begin{description}
+  \item[国土数値情報\url{https://nlftp.mlit.go.jp/}]国土交通省が管理するサイト。行政区域、土地利用区分、メッシュ気候値など、多くの地理情報が利用可能。
+  \item[基盤地図情報\url{https://www.gsi.go.jp/kiban/}]国土地理院が管理するサイト。詳細なDEMなどが利用可能。
+  \item[自然環境情報webGIS\url{http://gis.biodic.go.jp/webgis/index.html}]環境省生物多様性センターが管理するサイト。動植物の分布情報などが豊富。
+\end{description}
+
+今回は、国土数値情報（図\ref{mlit1}）から、山梨県の行政界（\verb|N03-20240101_19.shp|とその関連ファイル）と、山梨県周辺の詳細土地利用細分メッシュ（ラスタ版、\verb|L03-b-14_5238.tif|、\verb|L03-b-14_5338.tif|、\verb|L03-b-14_5339.tif|、\verb|L03-b-14_5438.tif|）を入手しましょう。
+
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{2_gis/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{mlit1.png}\\
+\caption{国土数値情報のトップページ}
+\label{mlit1}
+\end{center}
+\end{figure}
+
+上記ページを下にスクロールすると、利用可能な様々なデータが表示されます。今回はこの中から、行政区域（図\ref{mlit2}）と詳細土地利用細分メッシュ（ラスタ版、図\ref{mlit3}）をそれぞれ利用します。
+
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{2_gis/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{mlit2.png}\\
+\caption{行政区域のページ}
+\label{mlit2}
+\end{center}
+\end{figure}
+
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{2_gis/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{mlit3.png}\\
+\caption{詳細土地利用細分メッシュ（ラスタ版）のページ}
+\label{mlit3}
+\end{center}
+\end{figure}
+
+なお、ダウンロードに際し、アンケートを求められます。我々利用者がどのように利用しているのかを回答することで運営側の予算獲得や整備の動機付けになりますで、必ず回答しましょう。
+
+\section{データの読み込みと操作}
+  \subsection{データの読み込み}
+\verb|R|で地理情報データを扱うためのパッケージは多数ありますが、ここではベクタデータ用として\index{sf@sfパッケージ}\verb|sf|パッケージ、ラスタデータ用として\index{stars@starsパッケージ}\verb|stars|パッケージを紹介します。
+
+先ほどダウンロードしたデータの内、山梨県の行政界はベクタデータ、土地利用データはラスタデータです。基本的にラスタデータの方がファイルサイズを小さくできるので、大面積にわたるデータはラスタデータで扱うことが多いです。
+
+  \subsubsection{ベクタデータ}
+ベクタデータは、\index{readsf@\texttt{read\_sf()}}\verb|read_sf|関数で読み込みます。まず、先ほど入手した山梨県の行政界を読み込んでみましょう。
+
+\begin{itembox}[l]{ベクタデータの読み込み}
+\begin{verbatim}
+library(sf)
+yama <- read_sf(here("data", "N03-20240101_19.shp"), options = "ENCODING=UTF-8")
+yama
+Simple feature collection with 36 features and 6 fields
+Geometry type: POLYGON
+Dimension:     XY
+Bounding box:  xmin: 138.1801 ymin: 35.16838 xmax: 139.1344 ymax: 35.97171
+Geodetic CRS:  JGD2011
+（以下、省略）
+\end{verbatim}
+\end{itembox}
+sf形式の特徴として、先頭にそのデータの種類（ポリゴン、点など）と座標参照系などが表示される点です。
+  \subsubsection{座標参照系とは}
+\index{ざひょうさんしょうけい@座標参照系}座標参照系とは、GIS上で位置を表す決まりで、地球上の位置と緯度経度を対応させる基準である測地系と、数値による位置（座標）の表し方である座標系を組みわせたものです。用途に応じて様々な座標参照系が存在します。これらの様々な座標参照系は、\index{EPSGこーど@EPSGコード}EPSGコードと呼ばれる数字で識別されます。
+
+地球上の位置を決めるためには、地球の形や基準点などについて定義する必要があります。日本測地系（この中にも何種類かあります）、世界測地系（WGS84とも呼ばれます）など、いくつかの測地系があります。
+
+地球上の位置を示すのには、一般に緯度経度が用いられます。しかし、緯度経度は地球上のあらゆる場所を指定することができますが、3次元での角度で表現されるため、その座標値を平面で表現する場合、距離・面積・角度が正確でないという特徴があります。用途によっては、地点間の距離、あるいは面積を知りたいこともあると思います（困ったことに、生態学では多くの場合こちらの需要が高いです）。そこで、3次元である地球を2次元の平面に投影し、メートル法に基づいたXY座標で表現する方法も存在します。3次元を2次元にしているので、基準点から離れるほどずれが大きくなりますが、ある程度の狭い範囲では実用に耐えうるレベルで正確です。対象とする空間的な広さは、擬似メルカトル法 $>$UTM法$>$平面直角座標となっています。
+
+ややこしいことに、同じ「緯度経度」による表現であっても、測地系が違えば異なる緯度経度になってしまいます（基準が違うので）。ですので、測地形と座標系はセットで確認が必要です。世界測地系と日本測地系2011および2000の誤差は、ほぼないと言われています。ただし、一部のソフトでは、日本測地系2011が適切に認識されないことがあります。その場合は、世界測地系か、日本測地系2000を使ってください。
+
+いくつか、代表的な座標参照系とそのEPSGコードを紹介します。
+
+\begin{table}
+\begin{center}
+\caption{代表的な座標参照系}
+\label{epsg}
+\begin{tabularx}{\textwidth}{lXXX} \toprule
+EPSGコード & 測地系 & 座標系 & 備考 \\ \midrule
+4326 & 世界測地系 & 緯度経度 & GarminのGPSなどで採用 \\ 
+6668 & 日本測地系2011 & 緯度経度 &  \\
+4612 & 日本測地系2000 & 緯度経度 &  \\
+3857 &  世界測地系 & 擬似メルカトル法 & Webのタイル地図などで使われる  \\
+6690 & 日本測地系2011 & UTM53（東経138-144） &  \\
+3099 & 日本測地系2000 & UTM53（東経138-144） &  \\
+6676 & 日本測地系2011 & 平面直角座標8系（新潟県、長野県、山梨県、静岡県） &  \\
+2450 & 日本測地系2000 & 平面直角座標8系（新潟県、長野県、山梨県、静岡県） &  \\ \bottomrule
+\end{tabularx}
+\end{center}
+\end{table}
+
+    \subsubsection{緯度経度の情報からshpファイルを作る}
+自分でshpファイルを作ることも可能です。緯度経度の情報を持ったファイルを読み込み、\index{stassf@\texttt{st\_as\_sf()}}\verb|st_as_sf|関数でshpファイルに変換します。この際、先ほど説明した座標参照系のEPSGコードを、引数\texttt{crs}に与えてください。
+\begin{itembox}[l]{緯度経度情報からshpファイルを作る}
+\begin{verbatim}
+standloc <- read_excel(here("data", "data.xlsx"), sheet="Stand") %>%
+  st_as_sf(., coords=c("Lon", "Lat"), crs=4326)
+standloc
+Simple feature collection with 40 features and 2 fields
+Geometry type: POINT
+Dimension:     XY
+Bounding box:  xmin: 138.2518 ymin: 35.21183 xmax: 139.0567 ymax: 35.90802
+Geodetic CRS:  WGS 84
+# A tibble: 40 × 3
+   Region Stand            geometry
+ * <chr>  <chr>         <POINT [°]>
+ 1 A      ST1   (138.2697 35.83841)
+ 2 A      ST2   (138.2518 35.85942)
+ （以下、省略）
+\end{verbatim}
+\end{itembox}
+
+  \subsubsection{ラスタデータ}
+ラスタデータは、\index{readstars@\texttt{read\_stars()}}\verb|read_stars|関数で読み込みます。先ほど入手した、山梨県の詳細土地利用細分メッシュ（ラスタ）の1つを読み込んでみましょう。
+\begin{itembox}[l]{ラスタデータの読み込み}
+\begin{verbatim}
+library(stars)
+e <- read_stars(here("data", "L03-b-14_5238", "L03-b-14_5238.tif"))
+stars object with 2 dimensions and 1 attribute
+attribute(s):
+ L03-b-14_5238.tif 
+ 50     :320805    
+ 0      :100000    
+ 150    : 77458    
+ 70     : 48285    
+ 20     : 41220    
+ 10     : 18839    
+ (Other): 33393    
+dimension(s):
+  from  to offset      delta  refsys point x/y
+x    1 800    138    0.00125 JGD2000 FALSE [x]
+y    1 800  35.33 -0.0008333 JGD2000 FALSE [y]
+\end{verbatim}
+\end{itembox}
+ラスタデータは、1箇所に1つのデータしか持てません。そのデータの要素ごとの個数や、測地系などに関する情報が表示されます。
+
+今回は、山梨県全体のラスタデータを入手しているので、実際には複数のラスタファイルを読み込み、結合する必要があります。\index{terra@terraパッケージ}\verb|terra|パッケージの\index{mosaic@\texttt{mosaic()}}\verb|mosaic|関数でも結合できるのですが、今回のファイルについては結合できなかったため、一度データ部分だけを抽出し、緯度経度情報をもとにベクタファイルとして再構築します。また、ファイル数が多いので、繰り返し命令を使いながら結合します。
+\begin{verbatim}
+tiffiles <- list.files(getwd(), pattern="*.tif", recursive = TRUE)
+for (i in 1:length(tiffiles)) {
+  temp <- read_stars(tiffiles[i]) %>%
+    as.data.frame(.) %>%
+	  rename_at(., 3, ~"lu") %>% # 土地利用を示す列名を「lu」に統一
+    filter(!is.na(lu))
+  if (i==1) { lu <- temp
+  } else { lu <- lu %>% bind_rows(., temp)}
+}
+# shpファイルに変換する
+lu <- lu %>%
+  st_as_sf(., coords=c("x", "y"), crs=4612)
+\end{verbatim}
+最後にshpファイルに変換する際、日本測地系2000の緯度経度形式を指定している点に注意して下さい。数値データからshpファイルに変換する際は\textgt{元のデータが作成された際の座標参照系を指定}するようにして下さい。
+
+  \subsection{データの操作}
+\subsubsection{座標参照系の変更}
+\index{sttransform@\texttt{st\_transform()}}単独のファイルについても状況によって緯度経度がよかったりメートル方が良かったりしますし、後に行う複数のファイルを結合する際には座標参照系が一致しなければならないので、これは非常に多用します。以下では、山梨県の行政界の座標参照系を、日本測地系2011の平面直角座標8系に変換しましょう。
+\begin{itembox}[l]{座標参照系の変更}
+\begin{verbatim}
+yama %>%
+  st_transform(., crs=6676)
+\end{verbatim}
+\end{itembox}
+
+\subsubsection{バッファを作る}
+\index{stbuffer@\texttt{st\_buffer()}}調査地周辺の情報を把握する際、調査地点から任意の範囲の情報を収集することが一般的です。そのようなことをする際に、ポイントデータから任意の半径を持ったバッファを発生させることが有用です。以下では、毎木調査の地点から半径500mのバッファを発生させましょう。ただし、メートル単位のバッファを適切に発生させるためには、取り扱うファイルの座標参照系がメートル法である必要があります。
+\begin{itembox}[l]{任意の半径のバッファの作成}
+\begin{verbatim}
+standloc %>%
+  st_transform(., crs=6676) %>%
+  st_buffer(., dist=500)
+\end{verbatim}
+\end{itembox}
+
+\subsubsection{面積の測定}
+\index{starea@\texttt{st\_area()}}ポリゴンデータの場合、その面積を知りたいことがあると思います。以下では、山梨県の行政界のポリゴンごとの面積を測定します。ただし、標準では平方メートル（m$^{2}$）の値が得られるのですが、桁が大きくなりすぎるので、平方キロメートル（km$^{2}$）として計算します（ややこしいことに、結果に勝手に\verb|[m^2]|という単位が表示されるので、誤解しないようにお願いします）。また、こちらも当然ですが、座標参照系がメートル法でなければ正しい値は計算できません。
+\begin{itembox}[l]{面積の測定と結果の付与}
+\begin{verbatim}
+yama %>%
+  st_transform(., crs=6676) %>%
+  mutate(Area_km=st_area(.)/(1000^2))
+\end{verbatim}
+\end{itembox}
+
+\subsubsection{位置情報の取得}
+\index{stcoordinates@\texttt{st\_coordinates()}}shpファイルは位置情報を持っていますが、その位置情報（緯度経度など）が数字として必要になる場合もあります。
+\begin{itembox}[l]{位置情報の取得}
+\begin{verbatim}
+st_coordinates(standloc)
+\end{verbatim}
+\end{itembox}
+
+では、使い方に慣れるために、この数値として取り出した位置情報の数字を、データに結合しましょう。
+\begin{exercise}{位置情報の抽出と付与}{stcoordinates1}
+\begin{verbatim}
+standloc %>%
+  ____(lon=st_coordinates(.)[,1], lat=st_coordinates(.)[,__])
+\end{verbatim}
+\end{exercise}
+
+
+\subsubsection{ポリゴンの重心の取得}
+\index{stcentroid@\texttt{st\_centroid()}}ポリゴンは多角形ですが、その代表的な位置の一つとして重心があります。ポリゴンの重心というポイントデータを、以下のようにして作成できます。
+\begin{itembox}[l]{ポリゴンの重心の取得}
+\begin{verbatim}
+yama %>%
+  st_centroid(.)
+\end{verbatim}
+\end{itembox}
+
+\subsubsection{ファイル同士の結合}
+通常のファイル同士の結合については、すでに学びました。\verb|xxxx_join|関数で結合する際、結合するためには結合するデータに共通のIDが必要でした。一方、地理情報データは自分の位置の情報を持っていますので、このような共通のIDがなくても結合が可能です。ただし、正しく結合するためには、上記の座標参照系が一致している必要があります。
+
+以下では、毎木調査のプロットに、山梨県の市町村情報を結合しましょう。そのために、まず両者の座標参照系を一致させます。毎木調査のプロットは元々は地理情報データはなく後からベクタファイルに変換しており、EPSGコードは4326（世界測地系、緯度経度）です。一方、山梨県の行政界は、EPSGコード4612（日本測地系2011、緯度経度）になっています。ここでは、日本測地系2011のメートル法である6676に両者を変換しましょう。
+\begin{exercise}{座標参照系の変換}{sttransform1}
+\begin{verbatim}
+yama <- yama %>%
+  ____(., crs=6676)
+standloc <- standloc %>%
+  ____(., crs=6676)
+\end{verbatim}
+\end{exercise}
+
+これで、結合する準備が整いました。ベクタファイル同士の結合は、\index{stintersection@\texttt{st\_intersection()}}\verb|st_intersection|を使います。
+\begin{itembox}[l]{ファイル同士の結合}
+\begin{verbatim}
+standloc2 <- standloc %>%
+  st_intersection(., yama)
+Simple feature collection with 40 features and 8 fields
+Geometry type: POINT
+Dimension:     XY
+Bounding box:  xmin: -22412.75 ymin: -87437.91 xmax: 50459.76 ymax: -10198.36
+Projected CRS: JGD2011 / Japan Plane Rectangular CS VIII
+# A tibble: 40 × 9
+   Region Stand N03_001 N03_002 N03_003 N03_004
+ * <chr>  <chr> <chr>   <chr>   <chr>   <chr>
+ 1 D      ST1   山梨県  <NA>    <NA>    甲府市
+ 2 I      ST1   山梨県  <NA>    <NA>    都留市
+ （画面表示の都合上、一部省略しています）
+\end{verbatim}
+\end{itembox}
+
+ちなみに、上記の「座標参照系の変換」および「ファイル同士の結合」は、わかりやすく説明するために個別に説明しましたが、実際は以下のように一連のパイプライン処理として記述が可能です。
+\begin{verbatim}
+yama <- yama %>%
+  ____(., crs=6676)
+standloc2 <- standloc %>%
+  st_transform(., crs=6676) %>%
+  st_intersection(., yama)
+\end{verbatim}
+
+では、ファイル結合を使ってもう少し実用的な解析をやってみましょう。「毎木調査のプロットの半径500m以内の、土地利用種ごとの割合」を算出します。この作業手順を整理すると、以下のようになります。
+\begin{itemize}
+  \item 毎木調査プロットを日本測地系2011の平面直角座標8系に変換し、半径500mのバッファを生成する
+  \item 土地利用情報を日本測地系2011の平面直角座標8系に変換、座標参照系を統一する
+  \item 毎木調査プロットのバッファと土地利用情報を結合する
+  \item 地域、プロット、土地利用種ごとに、データ数を計算する
+  \item 地域、プロットごとに、すべての土地利用種の合計データ数に対する土地利用種のデータ数の比率を計算する
+\end{itemize}
+これまでに学んだ知識で実行できますので、演習を兼ねて順に実行します。
+
+\begin{exercise}{半径500mのバッファを作る}{stbuffer1}
+\begin{verbatim}
+standloc2 <- standloc %>%
+  ____(., crs=6676) %>%
+  ____(., dist=____)
+\end{verbatim}
+\end{exercise}
+
+\begin{exercise}{座標参照系を6676に変更}{sttransform2}
+注意！この処理は時間がかかります。
+\begin{verbatim}
+lu <- lu %>%
+  ____(., crs=____)
+\end{verbatim}
+\end{exercise}
+
+\begin{exercise}{ベクタファイル同士の結合}{stintersection1}
+\begin{verbatim}
+standloc2 <- standloc2 %>%
+  ____(., lu)
+\end{verbatim}
+\end{exercise}
+
+\begin{exercise}{土地利用種ごとのデータ数の計算}{reframe4}
+\begin{verbatim}
+landuseratio <- standloc2 %>%
+  group_by(____, ____, lu) %>%
+  ____(Landuse=n())
+\end{verbatim}
+\end{exercise}
+
+\begin{exercise}{プロットごとの土地利用種の割合の計算}{mutate4}
+\begin{verbatim}
+landuseratio <- landuseratio %>%
+  group_by(Region, Stand) %>%
+  ____(LanduseRatio=Landuse/sum(Landuse))
+landuseratio
+# A tibble: 73 × 5
+# Groups:   Region, Stand [40]
+   Region Stand lu    Landuse LanduseRatio
+   <chr>  <chr> <fct>   <int>        <dbl>
+ 1 A      ST1   50         75       1     
+ 2 A      ST2   50         78       1     
+（以下、省略）
+\end{verbatim}
+\end{exercise}
+以上で、土地利用種の割合を計算すること自体はできました。ただし、土地利用の種類は数字でコードされており、直感的にわかりにくいです。また、結果を視覚的に把握するためには、データが横方向に展開されていた方が見やすいかもしれません。
+
+\begin{itembox}[l]{土地利用種の割り当てと横方向への展開}
+\begin{verbatim}
+ludf <- landuseratio %>%
+  filter(lu!=0) %>%
+  mutate(Type=case_when(lu=="10" ~ "Rice",
+    lu=="20" ~ "Farm",
+    lu=="50" ~ "Forest",
+    lu=="60" ~ "Wasteland",
+    lu=="70" ~ "Buildings",
+    lu=="91" ~ "Road",
+    lu=="92" ~ "Railway",
+    lu=="100" ~ "Humansettlements",
+    lu=="110" ~ "River",
+    lu=="140" ~ "Seashore",
+    lu=="150" ~ "Sea",
+    lu=="160" ~ "Golf")) %>%
+  pivot_wider(., id_cols=c("Region", "Stand"), names_from="Type",
+    values_from="LanduseRatio", values_fill=0)
+\end{verbatim}
+\end{itembox}
+
+この一連の処理も、本来であればパイプラインで一度に記述することができます。
+\begin{verbatim}
+lu <- lu %>%
+  st_transform(., crs=6676)
+ludf <- standloc %>%
+  st_transform(., crs=6676) %>%
+  st_buffer(., dist=500) %>%
+  st_intersection(., lu) %>%
+  group_by(Region, Stand, lu) %>%
+  reframe(Landuse=n()) %>%
+  group_by(Region, Stand) %>%
+  mutate(LanduseRatio=Landuse/sum(Landuse)) %>%
+  filter(lu!=0) %>%
+  mutate(Type=case_when(lu=="10" ~ "Rice",
+    lu=="20" ~ "Farm",
+    lu=="50" ~ "Forest",
+    lu=="60" ~ "Wasteland",
+    lu=="70" ~ "Buildings",
+    lu=="91" ~ "Road",
+    lu=="92" ~ "Railway",
+    lu=="100" ~ "Humansettlements",
+    lu=="110" ~ "River",
+    lu=="140" ~ "Seashore",
+    lu=="150" ~ "Sea",
+    lu=="160" ~ "Golf")) %>%
+  pivot_wider(., id_cols=c("Region", "Stand"), names_from="Type",
+    values_from="LanduseRatio", values_fill=0)
+\end{verbatim}
+
+\section{作図}
+地理情報データも、もちろんggplotで作図することが可能です。以下では主に、ベクタファイルの作図について扱います。ベクタファイルは\index{geomsf@\texttt{geom\_sf()}}\verb|geom_sf|という専用の関数で扱います。この関数は少し特殊で、渡されたベクタファイルの種類（点、ポリゴンなど）を自動で判別し、描画します。
+  \subsection{データ単独の作図}
+\begin{itembox}[l]{ベクタファイルの描画}
+\begin{verbatim}
+p1 <- ggplot()+
+  geom_sf(data=yama)+
+  theme_bw(base_family="HiraginoSans-W3")
+p1
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{2_gis/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{yamabdr.pdf}\\
+\caption{山梨県の行政界}
+\label{yamabdr}
+\end{center}
+\end{figure}
+
+ggplotですので、以前と同じように追加で要素を加えることができます。以下では、市町村ごとに色を変更したり、他のベクタファイルを重ねてみます。
+\begin{verbatim}
+p1 + geom_sf(data=yama, aes(fill=N03_004))
+p1 + geom_sf(data=standloc, fill="black")
+\end{verbatim}  
+
+  \subsection{背景地図の活用}
+\index{ggspatial@ggspatialパッケージ}\index{annotationmaptile@\texttt{annotation\_map\_tile()}}上記の例では手元にあるベクタファイルを描画しましたが、背景の地図も使うことができます。なお、実行するためにはインターネットに接続する必要があります。
+\begin{itembox}[l]{背景地図を伴った作図}
+\begin{verbatim}
+library(ggspatial)
+p2 <- ggplot(standloc)+
+  annotation_map_tile(zoomin = -2) +
+  geom_sf()
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{2_gis/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{plots.pdf}\\
+\caption{背景地図を利用した毎木調査プロット位置図}
+\label{plots}
+\end{center}
+\end{figure}
+\index{annotationmaptile@\texttt{annotation\_map\_tile()}}\verb|annotation_map_tile|関数で、背景地図をダウンロードして描画します。引数のzoominの値を大きくするとより解像度の高い地図が得られますが、その分ダウンロードするファイルサイズが大きくなりますので、ほどほどにしておいた方がいいです（作業フォルダに、ひっそりとroam.cacheというフォルダができていることに注意して下さい！）。
+
+  \subsection{動的な地図}
+\index{leaflet@leafletパッケージ}\index{leafletminicharts@leaflet.minichartsパッケージ}\index{leafletminicharts@\texttt{leaflet.minicharts()}}上記の例では絵としての背景地図を加えましたが、ユーザーの動きに合わせて情報が表示されるような動的な地図も作成可能です。こちらも、実行するためにはインターネットに接続する必要があります。
+\begin{itembox}[l]{動的な地図}
+\begin{verbatim}
+### 事前準備として、xy座標、土地利用割合が入ったデータを作る
+ludf <- ludf %>%
+  left_join(., standloc, by=c("Region", "Stand")) %>%
+  # 地図の表示用に、ID列を作る
+  mutate(ID=str_c(Region, Stand, sep=" "))
+### leafletによる動的な地図の作成
+library(leaflet)
+library(leaflet.minicharts)
+leaflet(data=ludf) %>% 
+  addTiles() %>% 
+  setView(lng=mean(ludf$lon), lat=mean(ludf$lat),zoom=9) %>%
+  # 各調査地点
+  addCircleMarkers(lng=~lon,lat=~lat, radius=5,
+    color="black", weight=2, label=~ID, data=ludf) %>%
+  addMinicharts(lng=ludf$lon, lat=ludf$lat,
+    type = "bar", chartdata=ludf[, 3:9],
+    width = 30, height = 50)
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{2_gis/figs/}}
+\includegraphics[width=15cm,pagebox=cropbox,clip]{leaflet.png}\\
+\caption{動的な地図}
+\label{leaflet}
+\end{center}
+\end{figure}

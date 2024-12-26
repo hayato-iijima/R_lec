@@ -1,0 +1,54 @@
+\documentclass[dvipdfmx]{jsarticle}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{ascmac}
+\usepackage{hyperref}
+\usepackage{pxjahyper}
+\usepackage{cleveref}
+\usepackage{autonum}
+\usepackage{makeidx}
+\makeindex
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage[edges]{forest}
+\usepackage{color}
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable, skins, theorems}
+\renewcommand{\theenumii}{\theenumi-\arabic{enumii}}
+\renewcommand{\labelenumii}{\theenumii}
+\renewcommand{\abstractname}{この資料について}
+\theoremstyle{definition}% 日本語用．定理とか斜体にならないようにする
+%\newtheorem{exercise}{演習}
+%\crefname{exercise}{演習}{演習}
+\newtcbtheorem{exercise}{演習}{enhanced, %TikZの内部処理を導入する．ある程度複雑なものには必須．
+    attach boxed title to top left={xshift=5mm,yshift=-3mm}, 
+    boxed title style={colframe = black, colback = white},
+    coltitle = black,
+    colback = white,
+    colframe = black,
+    fonttitle = \bfseries,
+    breakable = true,
+    top = 4mm
+}{exer}
+%https://qiita.com/Hdan/items/8c59a7e0a3215ae32d74
+%https://qiita.com/rityo_masu/items/5ef248024b294d72799a
+
+\begin{document}
+\title{Rの操作とRを用いた統計解析}
+\author{飯島勇人\footnote{（国研）森林総合研究所野生動物研究領域}
+\footnote{連絡先: hayato.iijima@gmail.comまたはhayatoi@affrc.go.jp}}
+\maketitle
+\begin{abstract}
+本資料は、\verb|R|の操作や\verb|R|による統計解析を初学者が習得するためのものです。できるだけ実際に\verb|R|で作業を行い、実体験を通して学ぶ内容となっています。本資料は飯島が作成したものですが、様々な文献や講義等から学んだものの集合体です。ただし、できるだけ努力はしていますが、内容に不正確な部分があるかもしれません。あくまで自己責任での利用をお願いします。
+\end{abstract}
+%\include{0_intro/intro}
+\tableofcontents
+\include{1_basic/basic}
+\include{2_gis/gis}
+\include{3_glm/glm}
+\include{4_hm/hm}
+\include{5_report/rmarkdown}
+\include{6_answers/answers}
+\addcontentsline{toc}{section}{索引}
+\printindex
+\end{document}

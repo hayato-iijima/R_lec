@@ -1,0 +1,1331 @@
+\part{階層モデリング}
+\label{stathm}
+
+\section{生態学と階層モデル}
+\subsection{\index{かいそうもでる@階層モデル}階層モデルの定義}
+階層モデルは、端的に言えば、以下の2モデルを持つモデルのことです。
+\begin{description}
+	\item[過程モデル（Process model）] 生態系が駆動する過程（生態的過程）を表現したモデル
+	\item[観測モデル（Observation model）] 生態的過程を観測する過程を表現したモデル
+\end{description}
+生態学の主目的は、生態系の構成要素や環境が相互にどのように関連し、駆動しているのかという過程（生態的過程）を推測することです。生態的過程は直接観測できないので、生態的過程の構成要素に関連したデータを観測します（図\ref{hm}）。しかし、生態的過程とは無関係に、観測には誤差が伴います。また、生態的過程の全てをモデル化することは困難であるため、生態的過程にも観測とは無関係に不確実性が伴います。こうした、推論の過程を表現したものが階層モデルと言えます。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=10cm,clip]{hm.pdf}\\
+\caption{階層モデルの概念図}
+\label{hm}
+\end{center}
+\end{figure}
+
+この説明から分かるように、階層モデルは何か特定の用途のためのモデルではありません。これまで、様々な目的で開発されたモデルを包括するような、概念とも言えるモデルです。そのため、具体的にどのようにモデルを構築し、推論に用いればいいのか少しわかりにくいかも知れません。
+
+しかし、階層モデルを構成する過程モデルや観測モデルを単体で見ると、GLM（一般化線形モデル）あるいはGLMM（一般化線形混合モデル）となっています。階層モデルは、すでに学んだGLMやGLMMを組み合わせて構築することが可能です。本資料では、階層モデルを用いた野生動物の個体数推定について説明します。
+
+野生動物の個体数推定は、対象種が個体識別できるか、個体群が閉鎖（調査期間中に個体の増加と減少がない）と見なせるか、個体数と密度のどちらを推定するのかによって、様々なモデルが開発されています（図\ref{guide_model}）。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=8cm,clip]{iijima2020.pdf}\\
+%\includegraphics[width=40\zw,clip]{ranef_post_2.eps}\\
+\caption{個体数推定モデルの選択基準}
+\label{guide_model}
+ \begin{flushleft}
+\scriptsize Iijima H (2020) A review of wildlife abundance estimation models: comparison of models for correct application. Mammal Study 45:177-188
+\end{flushleft}
+\end{center}
+\end{figure}
+
+\clearpage
+\section{\index{にこうこんごうもでる@二項混合モデル}二項混合モデル}
+	\subsection{基本的なモデル}
+二項混合モデルは、対象生物の移出入や生死が生じない短い期間に複数回調査を行うことで、検出率を考慮して個体数を推定する手法です。個体の計数を複数回行うのみで対象生物の個体数を推定できることから、近年様々な生物種で利用されています。
+二項混合モデルの基本系は、以下のとおりです。
+\begin{align}
+N_{i} &\sim \text{Poisson}(\lambda) \label{nmix1} \\
+y_{ij} | N_{i} &\sim \text{Binomial}(N_{i}, p) \label{nmix2}
+\end{align}
+式\ref{nmix1}は個体数に関する過程モデルです。調査地に複数の調査地点があり、調査地点間の個体数のばらつきはポアソン分布に従うと仮定しています。そして式\ref{nmix2}は、この個体数が検出率$p$を伴って観測されることを表現しています。観測される個体数$y_{ij}$は常に過小評価になっていると言うことです。ここで、$y$の添え字に$j$が入っていることに注意しましょう。これは、ある調査地点$i$における$j$回目の調査を意味します。上記の通り、二項混合モデルは対象生物の移出入や生死が生じない短い期間に複数回調査を行うことで検出率を推定しますので、$j$という調査回数の次元が加わります。
+
+ここでは局所個体数$\lambda$や検出率$p$は一定を仮定していますが、もちろんこれらが変動するように拡張することも容易です。以下では、局所個体数に場所差がある例を扱います。
+
+\subsubsection{データを生成する}
+では、解析するデータを用意しましょう。今回は、25地点でアカゲラ（図\ref{bird}）の個体数を計数します。そして、アカゲラの移出入や生死が生じない短い期間に10回計数したとします。この状況で、アカゲラの真の個体数を推定します。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=10cm,clip]{bird.jpg}\\
+\caption{アカゲラ}
+\label{bird}
+\end{center}
+\end{figure}
+\begin{verbatim}
+set.seed(1)
+# 調査箇所数
+Nsite <- 25
+# 調査機会数
+Nrep <- 10
+# 検出率の平均
+p_det <- 0.6
+# 平均個体群サイズlambda
+lambda <- 30
+# 過程モデルに従って局所個体数を生成
+N <- rpois(Nsite, lambda)
+# 調査箇所（i）かつ調査機会ごとの係数値を格納する箱
+y <- matrix(NA, nrow=Nrep, ncol=Nsite)
+# 調査箇所（i）かつ調査機会ごとの係数値を生成
+for (i in 1:Nsite) {
+  y[, i] <- rbinom(Nrep, N[i], p_det)
+}
+\end{verbatim}
+では、まず生成したデータを見てみましょう。真の個体数に対して観測値を見ると、発見が完全でないためにほとんど低い値となっています（図\ref{data_nmix}）。このまま観測値を用いてアカゲラの個体数を推定しようとすると、過小評価となるのは明らかです。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=10cm,clip]{data_nmix.pdf}\\
+%\includegraphics[width=40\zw,clip]{ranef_post_2.eps}\\
+\caption{真の個体数に対する観測値}
+\label{data_nmix}
+\end{center}
+\end{figure}
+
+このようなデータに対し、個体数と検出率を二項混合モデルで推定しましょう。
+
+\begin{exercise}{BUGS言語による二項混合モデルの記述}{nmix_ex1}
+以下のコードの下線部分（\verb|____|）を埋めて、上記の二項混合モデルをBUGS言語で記述せよ。データを生成したRのコードが参考になる。
+\begin{verbatim}
+# BUGS言語によるモデルの記述
+library(nimble)
+modelcode <- nimbleCode(
+{
+# 過程モデル
+for (i in 1:Nsite) {
+  # 調査箇所ごとの局所個体数は
+  # 平均個体数からポアソン分布に従って得られる
+  EN[i] ~ ____(meanN)
+}
+# 平均個体数の事前分布
+meanN ~ dunif(0, 1000)
+
+# 観測モデル
+# 検出率の事前分布
+estp ~ dunif(0, 1)
+for (i in 1:Nsite) {        # 調査箇所
+  for (j in 1:Nrep) {       # 調査機会
+    # 調査箇所（i）かつ調査機会（j）ごとの計数値
+    y[j, i] ~ ____(estp, EN[i])
+  }
+}
+} #モデルの記述はここまで
+)
+\end{verbatim}
+\end{exercise}
+
+\begin{exercise}{二項混合モデルのためのデータの準備}{nmix_ex2}
+以下のコードの下線部分（\verb|____|）を埋めて、NIMBLEに渡すリストを完成させよ。
+\begin{verbatim}
+list_data <- list(_____)
+list_cons <- list(_______, _______)
+\end{verbatim}
+\end{exercise}
+
+		\subsubsection{初期値の設定}
+\begin{verbatim}
+init1 <- list(EN=rpois(Nsite, lambda)+10, meanN=lambda+10, estp=0.5)
+init2 <- list(EN=rpois(Nsite, lambda)+8, meanN=lambda+8, estp=0.9)
+init3 <- list(EN=rpois(Nsite, lambda)+15, meanN=lambda+15, estp=0.7)
+inits <- list(init1, init2, init3)
+\end{verbatim}
+		\subsubsection{監視対象パラメータの設定}
+\begin{verbatim}
+parameters <- c("EN", "meanN", "estp") 
+\end{verbatim}
+		\subsubsection{MCMC法の条件設定}
+\begin{verbatim}
+nc <- 3
+nb <- 10000
+ni <- 20000
+nt <- 10
+\end{verbatim}
+		\subsubsection{MCMC法の実行}
+\begin{verbatim}
+outnmix <- nimbleMCMC(code=modelcode,
+                  data=list_data,
+                  constants=list_cons,
+                  inits=inits,
+                  monitors=parameters,
+                  niter = ni,
+                  nburnin = nb,
+                  thin = nt,
+                  nchains = nc,
+                  progressBar = TRUE,
+                  samplesAsCodaMCMC = TRUE,
+                  summary = TRUE,
+                  WAIC = FALSE
+)
+\end{verbatim}
+		\subsubsection{結果の検証}
+$\hat{R}$値は全パラメータで1.1未満となっており、連鎖も定常状態に達しているようです（図\ref{nmix_mcmctrace}）。
+\begin{verbatim}
+library(coda)
+resdf <- as.data.frame(outnmix$summary$all.chain)
+GR.diag <- gelman.diag(outnmix$samples, multivariate = FALSE)
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+## MCMCトレースの作図
+# ggplot
+library(ggplot2)
+library(bayesplot)
+mcmc_trace(outnmix$samples) +
+ scale_color_discrete()
+\end{verbatim}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=10cm,clip]{nmix_mcmctrace.pdf}\\
+%\includegraphics[width=40\zw,clip]{ranef_post_2.eps}\\
+\caption{二項混合モデルの各パラメータのMCMCトレース}
+\label{nmix_mcmctrace}
+\end{center}
+\end{figure}
+
+今回解析に用いたデータは自分で生成していますので、推定値が正解（設定値）にどれほど近いのかを検証することが可能です。
+\begin{verbatim}
+library(ggplot2)
+library(bayesplot)
+library(patchwork)
+p1 <- mcmc_hist(outnmix$samples, pars="meanN") +
+        geom_vline(xintercept=lambda)
+p2 <- mcmc_hist(outnmix$samples, pars="estp")+
+        geom_vline(xintercept=p_det)+
+        scale_x_continuous(limits=c(0,1))
+compn <- data.frame(Setting=N,
+                    Estimates=resdf[grep("EN",rownames(resdf)),2],
+                    Lci=resdf[grep("EN",rownames(resdf)),4],
+                    Uci=resdf[grep("EN",rownames(resdf)),5])
+p3 <- ggplot(compn, aes(x=Setting, y=Estimates))+
+      geom_point()+
+      geom_abline(intercept=0, slope=1)+
+      geom_errorbar(aes(ymin=Lci, ymax=Uci))
+p1 + p2 + p3 + plot_layout(ncol=2)
+\end{verbatim}
+設定値と推定値を描画すると（図\ref{nmix_estandsettings}）、検出率を過大推定しており、それによって個体数を過小推定していることがわかります。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=10cm,clip]{nmix_estandsettings.pdf}\\
+%\includegraphics[width=40\zw,clip]{ranef_post_2.eps}\\
+\caption{二項混合モデルの推定値と設定値の関係}
+\label{nmix_estandsettings}
+\end{center}
+\end{figure}
+
+\begin{exercise}{反復調査回数を増加させた状況での二項混合モデルによる個体数推定}{nmix_ex3}
+\begin{itemize}
+  \item 上記の二項混合モデルについて、各調査箇所における反復を20に増加させ、再びパラメータを推定せよ。
+\end{itemize}
+\end{exercise}
+
+20回に増加させると、今度はほぼ設定パラメータを推定できたようです（図\ref{nmix_estandsettings2}）。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=10cm,clip]{nmix_estandsettings2.pdf}\\
+%\includegraphics[width=40\zw,clip]{ranef_post_2.eps}\\
+\caption{二項混合モデルの推定値と設定値の関係（反復20回）}
+\label{nmix_estandsettings2}
+\end{center}
+\end{figure}
+
+	\subsection{個体数が共変量で決まるモデル}
+次は、二項混合モデルで個体数が共変量で決まる状況を考えます。アカゲラの数はその場所の餌量が多いほど多いとします。この過程をモデル化すると、以下の通りです。
+\begin{align}
+\log(\lambda_{i}) &= \alpha + \text{Food}_{i} \label{nmix3} \\
+N_{i} &\sim \text{Poisson}(\lambda_{i}) \label{nmix4} \\
+y_{ij} | N_{i} &\sim \text{Binomial}(N_{i}, p) \label{nmix5}
+\end{align}
+式\ref{nmix3}は個体数に関する過程モデルです。式\ref{nmix1}と異なり、切片と餌量（Food）の線形予測子によって$\lambda$が決まるとしています。それ以降は、基本の二項混合モデルと同様です。
+
+		\subsubsection{データを生成する}
+では、このモデルで解析するデータを用意しましょう。
+\begin{verbatim}
+#データの生成
+set.seed(1)
+# 調査箇所数
+Nsite <- 25
+# 調査機会数
+Nrep <- 20
+# 検出率の平均
+p_det <- 0.6
+# 調査箇所の個体数量は、箇所ごとの食物量によって決まる
+food <- rnorm(Nsite, 0, 0.5)
+# 対数尺度での平均個体群サイズlog_lambda
+log_lambda <- log(30)
+# 過程モデルに従って局所個体数を生成
+N <- rpois(Nsite, exp(log_lambda + food))
+# 調査箇所（i）かつ調査機会ごとの係数値を格納する箱
+y <- matrix(NA, nrow=Nrep, ncol=Nsite)
+# 調査箇所（i）かつ調査機会ごとの係数値を生成
+for (i in 1:Nsite) {
+  y[, i] <- rbinom(Nrep, N[i], p_det)
+}
+\end{verbatim}
+個体数の場所差がポアソン分布に従うというのは前回と同じですが、そのポアソン分布の平均が単一のパラメータではなく、餌量によって決まるというモデルになっている点が異なっています。これは、すでに学んだポアソンGLMになっています。
+
+\begin{exercise}{共変量で局所個体数をモデル化した二項混合モデルによる個体数推定}{nmix_ex4}
+以下のコードの下線部分（\verb|____|）を埋めて、上記の二項混合モデルをBUGS言語で記述せよ。データを生成したRのコードが参考になる。
+\begin{verbatim}
+library(nimble)
+modelcode <- nimbleCode(
+{
+# 過程モデル
+for (i in 1:Nsite) {
+  # 調査箇所ごとの局所個体数は
+  # 箇所の食物量と平均の個体数量で決まる
+  ____(lambda[i]) <- log_lambda + bF*food[i]
+  EN[i] ~ dpois(lambda[i])
+}
+# 対数尺度での平均個体数の事前分布
+_______ ~ dnorm(0.0, 1.0E-3)
+# 食物量の係数
+_______ ~ dnorm(0.0, 1.0E-3)
+
+# 観測モデル
+# 検出率の事前分布
+estp ~ dunif(0, 1)
+for (i in 1:Nsite) {        # 調査箇所
+  for (j in 1:Nrep) {       # 調査機会
+    # 調査箇所（i）かつ調査機会（j）ごとの係数値
+    y[j, i] ~ dbin(estp, EN[i])
+  }
+}
+} #モデルの記述はここまで
+)
+\end{verbatim}
+\end{exercise}
+
+		\subsubsection{NIMBLEによるパラメータ推定}
+では、演習\ref{exer:nmix_ex4}で記述したBUGSコードに基づいて、個体数が餌量で決まるサブモデルを含む二項混合モデルのパラメータ推定を行いましょう。
+\begin{verbatim}
+# データの準備
+list_data <- list(y=y, food=food)
+list_cons <- list(Nsite=Nsite, Nrep=Nrep)
+
+# 初期値の設定
+init1 <- list(EN=rpois(Nsite, exp(log_lambda+food))+5, log_lambda=log(5), estp=0.5, bF=0)
+init2 <- list(EN=rpois(Nsite, exp(log_lambda+food))+3, log_lambda=log(3), estp=0.2, bF=-0.1)
+init3 <- list(EN=rpois(Nsite, exp(log_lambda+food))+10, log_lambda=log(10), estp=0.7, bF=0.1)
+inits <- list(init1, init2, init3)
+
+# 監視対象パラメータの設定
+parameters <- c("EN", "log_lambda", "estp", "bF")
+
+# MCMC法の条件設定
+nc <- 3
+nb <- 15000
+ni <- 30000
+nt <- 15
+
+# MCMC法の実行
+outnmix2 <- nimbleMCMC(code=modelcode,
+                  data=list_data,
+                  constants=list_cons,
+                  inits=inits,
+                  monitors=parameters,
+                  niter = ni,
+                  nburnin = nb,
+                  thin = nt,
+                  nchains = nc,
+                  progressBar = TRUE,
+                  samplesAsCodaMCMC = TRUE,
+                  summary = TRUE,
+                  WAIC = FALSE
+)
+\end{verbatim}
+		\subsubsection{結果の検証}
+\begin{verbatim}
+# 要約量の計算
+library(coda)
+resdf2 <- as.data.frame(outnmix2$summary$all.chain)
+GR.diag <- gelman.diag(outnmix2$samples, multivariate = FALSE)
+resdf2$Rhat <- GR.diag$psrf[,"Point est."]
+## MCMCトレースの作図
+# ggplot
+library(ggplot2)
+library(bayesplot)
+mcmc_trace(outnmix2$samples) +
+ scale_color_discrete()
+\end{verbatim}
+$\hat{R}$は全て1.1未満で、MCMCトレースも定常状態に達しているようです。前回同様、設定値と推定値の関係を確認しましょう（図\ref{nmix_estandsettings3}）。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=10cm,clip]{nmix_estandsettings3.pdf}\\
+%\includegraphics[width=40\zw,clip]{ranef_post_2.eps}\\
+\caption{二項混合モデルの推定値と設定値の関係（個体数共変量モデル）}
+\label{nmix_estandsettings3}
+\end{center}
+\end{figure}
+
+\clearpage
+\section{\index{ほかくさいほかくもでる@捕獲再捕獲（Capture-recapture）モデル}捕獲再捕獲モデル}
+この節では、対象生物が個体識別可能で、個体群が閉鎖している状況で個体数を推定するための捕獲再捕獲モデルを、階層モデルで構築します。捕獲再捕獲調査の基本的な手順と仮定は、以下のとおりです。
+\begin{itemize}
+	\item 1回の調査機会において、対象種を捕獲して標識、あるいは観察して模様等から個体を識別
+	\item 同様の調査を複数回行い、標識された個体については調査機会ごとの検出、不検出を記録。新たに観察された個体には、標識する。
+	\item （すでに説明しましたが）調査期間中、個体数は変動しない（閉鎖個体群）
+	\item 個体の検出率は、個体かつ調査機会によらず一定
+\end{itemize}
+		\subsection{データの生成}
+今回は、アカネズミを対象に、アカネズミを捕獲して標識して放逐し、その後再捕獲することを何回か行う（複数の調査機会）ことで個体数を推定する、捕獲再捕獲法の調査を行なったとします（図\ref{vole}）。そのような調査データを、生成しましょう。
+\begin{figure}[htb]
+%\begin{tabular}{ccc}
+%\begin{minipage}[t]{0.45\hsize}
+%\centering
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=4.8cm,clip]{vole.jpeg}\\
+\caption{アカネズミ}
+\label{vole}
+\scriptsize 写真提供：島田卓哉（森林総研）。
+%\end{minipage}
+%\begin{minipage}{0.1\hsize}
+%\end{minipage}
+%\begin{minipage}[t]{0.45\hsize}
+%\centering
+%\graphicspath{{4_hm/figs/}}
+%\includegraphics[width=5cm,clip]{catch.jpg}\\
+%\caption{アカネズミの捕獲調査の様子}
+%\label{catch}
+%\scriptsize 写真提供：島田卓哉（森林総研）。
+%\end{minipage}
+%\end{tabular}
+\end{figure}
+
+\begin{verbatim}
+# 乱数の種の設定
+set.seed(1)
+## 真の個体数
+N <- 50
+## 調査機会数
+Nsc <- 6
+## 検出率
+p_det <- 0.3
+
+## 検出履歴の生成
+y <- array(dim=c(N, Nsc))
+for (i in 1:N) {
+  for (k in 1:Nsc) {
+    # 個体ごとの、各調査機会における検出不検出データの生成
+    y[i,k] <- rbinom(1, 1, p_det)
+  }
+}
+# 一度も観測されない個体は観測できないので、
+# データから削除
+yobs <- y[apply(y,1,sum)>0,]
+yobs
+      [,1] [,2] [,3] [,4] [,5] [,6]
+ [1,]    0    0    0    1    0    1
+ [2,]    1    0    0    0    0    0
+ [3,]    0    0    1    0    1    1
+ [4,]    0    1    1    0    0    0
+ [5,]    0    0    0    0    1    0
+ [6,]    0    0    0    0    1    0
+# 以降省略
+\end{verbatim}
+このデータは、行が標識された個体、列が各調査機会で、検出されれば1、されなければ0が入力されています。例えば、1行目の個体は、実際にはずっと調査期間中その場所にいたにもかかわらず、4回目と6回目の調査でしか検出されていません。このような観測データは、以下のようなモデルで表現できると考えられます。
+\begin{equation}
+y_{it} \sim \mathrm{Bernoulli}(p)
+\end{equation}
+ここで$y_{it}$は個体（$i$）かつ調査機会（$t$）ごとの検出（1）または不検出（0）を示すデータ、$p$は検出率です。ベルヌーイ分布は初めて登場しますが、総試行回数が1の二項分布（$\mathrm{Binomial}(\psi, 1)$）と等価です。
+
+このような様子を見ていると、少なくとも標識できた個体数より、真の個体数は多いことが予想されます。このような、未知の個体数を推定する上で有用なのが、データ拡大法と呼ばれる手法です。
+
+	\subsection{\index{でーたかくだいほう@データ拡大法}データ拡大法}
+データ拡大法とは、データに擬似的な0を多数加えて、データを拡大する方法です。観測された個体数を$n$とすると、真の個体数$N$は$n$よりは大きいと予想されますが、その値は正確にはわかりません。例えば10個体かもしれないし、15個体かもしれません。真の個体数$N$の値が変動すると、MCMC法によって$N$の値を推定する際、取り扱う次元数が毎回変化してしまうため、推定が困難となります。
+
+そこで、真の個体数よりも多いと思われる量まで多数の0をデータとして加えて拡大します。この時のデータ量を$M$とすると、以下のように$n < N < M$という関係になります。加えた0のうち、一部は本当に存在する個体、一部は人為的に過剰に加えられた0であり生態学的には意味のないデータとなります（図\ref{DA}）。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=15cm,clip]{DA.pdf}\\
+%\includegraphics[width=40\zw,clip]{ranef_post_2.eps}\\
+\caption{観測データ、真の個体数、拡大されたデータの関係}
+\label{DA}
+\end{center}
+\end{figure}
+
+このようにすることで、推定の際に取り扱う個体数パラメータの次元のサイズは$M$で一定になり、推定が技術的に容易になります。もちろん、上記の通り実際には存在しない個体もデータとして加えることになります。そのため、新たに含有率（$\psi$）というパラメータを導入します。これは、加えた0の内真の個体数に含まれる割合です。以上をまとめると、以下のようになります。
+\begin{align}
+N = M\psi \\
+n = Np
+\end{align}
+
+しかし、真の個体数を推定したいのに、それより十分大きな数はどうやって知ることができるのでしょうか。これは、試行錯誤的に決定する必要があります。のちに説明しますが、真の個体数より十分大きい数の0を加えれば、加えるデータ数は推定結果に影響しません。
+
+	\subsection{階層モデルで表現した捕獲再捕獲モデル}
+以上の説明をふまえ、捕獲再捕獲モデルを階層モデルとして表現すると、以下のとおりです。
+		\subsubsection*{過程モデル}
+\begin{align}
+w_{i} &\sim \mathrm{Bernoulli}(\psi): \text{ wiは個体の在不在を示す} \\
+N &= \sum_{i=1}^{M} w_{i}
+\end{align}
+		\subsubsection*{観測モデル}
+\begin{equation}
+y_{it} \sim \mathrm{Bernoulli}(p w_{i})
+\end{equation}
+
+	\subsection{データの拡大}
+では、先ほどのデータを拡大してみましょう。ここでは、観測個体数と同じ数だけデータを拡大します（つまり観測個体数の2倍のデータセットにする）。
+\begin{verbatim}
+### データ拡大法
+# 観測個体数と同じ数だけ0を加える
+naug <- nrow(yobs)
+M <- nrow(yobs) + naug
+# 0のデータセットを観測データに加える
+yaug <- array(0,dim=c(M,Nsc))
+yaug[1:nrow(yobs),] <- yobs
+\end{verbatim}
+
+\begin{exercise}{BUGS言語による捕獲再捕獲モデルの記述}{cr_ex1}
+以下のコードの下線部分（\verb|____|）を埋めて、上記の標識再捕獲モデルをBUGS言語で記述せよ。
+\begin{verbatim}
+library(nimble)
+modelcode <- nimbleCode(
+{
+# 含有率の事前分布
+psi ~ ____(___, ___)
+# 個体群が調査範囲に存在するかしないかを推定
+for (i in 1:M) {
+    w[i] ~ dbern(psi)
+}
+# 検出率の事前分布
+p_det ~ dunif(0, 1)
+# 個体の在不在と検出率から、個体（i）かつ調査機会（j）
+# ごとの検出履歴データを説明する
+for (i in 1:M) {                     # 個体
+  for (k in 1:Nsc) {                 # 調査機会
+    prob_obs[i,k] <- p_det*w[i]      # 検出可能性の予測値
+    y[i,k] ~ ____(prob_obs[i,k])     # データはベルヌーイ分布に従う
+#    y[i,k] ~ dbin(prob_obs[i,k], 1) #上記の式と等価
+  }
+}
+## 導出パラメータ
+N <- sum(w[1:M])                     # 真の個体数は在（w=1）である個体数
+}                                    # モデルの記述はここまで
+)
+\end{verbatim}
+\end{exercise}
+	
+	\subsection{NIMBLEによるパラメータ推定}
+では、演習\ref{exer:cr_ex1}で記述したBUGSコードに基づいて、標識再捕獲モデルに基づく個体数推定を行いましょう。
+
+\begin{verbatim}
+# データと定数の準備
+list_data <- list(y=yaug)
+list_cons <- list(M=M, Nsc=Nsc)
+
+# 初期値の設定
+init1 <- list(psi=0.5, w=rep(1, list_cons$M), p_det=0.1)
+init2 <- list(psi=0.4, w=rep(1, list_cons$M), p_det=0.05)
+init3 <- list(psi=0.6, w=rep(1, list_cons$M), p_det=0.2)
+inits <- list(init1, init2, init3)
+
+# 監視対象パラメータの設定
+parameters <- c("psi", "w", "p_det", "N")
+
+
+## MCMC法の設定
+nc <- 3
+nb <- 1000
+ni <- 3000
+nt <- 2
+
+# MCMC法の実行
+out3 <- nimbleMCMC(code=modelcode,
+                  data=list_data,
+                  constants=list_cons,
+                  inits=inits,
+                  monitors=parameters,
+                  niter = ni,
+                  nburnin = nb,
+                  thin = nt,
+                  nchains = nc,
+                  progressBar = TRUE,
+                  samplesAsCodaMCMC = TRUE,
+                  summary = TRUE,
+                  WAIC = FALSE
+)
+\end{verbatim}
+
+	\subsection{結果の検証}
+では、推定結果を検証しましょう。$\hat{R}$は1.1未満となり、定常分布に達しているようです。
+\begin{verbatim}
+library(coda)
+resdf <- as.data.frame(out3$summary$all.chain)
+GR.diag <- gelman.diag(out3$samples, multivariate = FALSE)
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+## MCMCトレースの作図
+# ggplot
+library(ggplot2)
+library(bayesplot)
+mcmc_trace(out3$samples, pars=rownames(resdf)[!grepl("w",rownames(resdf))])+
+ scale_color_discrete()
+\end{verbatim}
+設定値との関係も確認しておきましょう（図\ref{CR_validation}）。検出率は若干過少推定ですが、個体数と検出率をうまく推定できたことがわかります。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=15cm,clip]{CR_validation.pdf}\\
+%\includegraphics[width=40\zw,clip]{ranef_post_2.eps}\\
+\caption{設定値と推定結果の比較}
+\label{CR_validation}
+\end{center}
+\end{figure}
+
+\subsection{データ拡大数の妥当性の検証}
+先ほど説明したように、データ拡大では解析者が任意の数の0データを加えて解析します。では、加えるデータ数によって推定結果は影響を受けないのでしょうか？
+
+結論から言うと、不確実性も含めた真の個体数の取り得る値以上にデータを加えていれば問題ありません。以下では、実際に加えるデータの数を変化させて得られる推定結果を比較することで、データ拡大数が（少なすぎなければ）結果に影響しないことを示します。以下の例では、元データ（標識個体数）の1.2倍しかデータ拡大しない場合、2倍にデータ拡大する場合（上記の例）、3倍にデータ拡大する場合の3通りの結果を比較します（図\ref{DAeffect}）。
+
+\begin{verbatim}
+# 拡大数が少ない
+naug <- round(nrow(yobs)*0.2, digits=0)
+M <- nrow(yobs) + naug
+yaug <- array(0,dim=c(M,Nsc))
+yaug[1:nrow(yobs),] <- yobs
+list_data <- list(y=yaug)
+list_cons <- list(M=M, Nsc=Nsc)
+init1 <- list(psi=0.5, w=rep(1, list_cons$M), p_det=0.1)
+init2 <- list(psi=0.4, w=rep(1, list_cons$M), p_det=0.05)
+init3 <- list(psi=0.6, w=rep(1, list_cons$M), p_det=0.2)
+inits <- list(init1, init2, init3)
+out3_2 <- nimbleMCMC(code=modelcode,
+                  data=list_data,
+                  constants=list_cons,
+                  inits=inits,
+                  monitors=parameters,
+                  niter = ni,
+                  nburnin = nb,
+                  thin = nt,
+                  nchains = nc,
+                  progressBar = TRUE,
+                  samplesAsCodaMCMC = TRUE,
+                  summary = TRUE,
+                  WAIC = FALSE
+)
+# 拡大量が多い
+naug <- nrow(yobs)*2
+M <- nrow(yobs) + naug
+yaug <- array(0,dim=c(M,Nsc))
+yaug[1:nrow(yobs),] <- yobs
+list_data <- list(y=yaug)
+list_cons <- list(M=M, Nsc=Nsc)
+init1 <- list(psi=0.5, w=rep(1, list_cons$M), p_det=0.1)
+init2 <- list(psi=0.4, w=rep(1, list_cons$M), p_det=0.05)
+init3 <- list(psi=0.6, w=rep(1, list_cons$M), p_det=0.2)
+inits <- list(init1, init2, init3) #, init2, init3)
+out3_3 <- nimbleMCMC(code=modelcode,
+                  data=list_data,
+                  constants=list_cons,
+                  inits=inits,
+                  monitors=parameters,
+                  niter = ni,
+                  nburnin = nb,
+                  thin = nt,
+                  nchains = nc,
+                  progressBar = TRUE,
+                  samplesAsCodaMCMC = TRUE,
+                  summary = TRUE,
+                  WAIC = FALSE
+)
+\end{verbatim}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=15cm,clip]{DAeffect.pdf}\\
+%\includegraphics[width=40\zw,clip]{ranef_post_2.eps}\\
+\caption{データ拡大数が推定結果に与える影響}
+\label{DAeffect}
+\end{center}
+\end{figure}
+
+\clearpage
+\section{\index{くうかんめいじほかくさいほかくもでる@空間明示捕獲再捕獲（Spatially explicit capture-recapture）モデル}空間明示捕獲再捕獲モデル}
+捕獲再捕獲モデルは、個体数を推定できますが、個体密度を推定することはできません。それは、捕獲再捕獲モデルには、個体数を推定する空間的な範囲を定義していないからです。捕獲再捕獲モデルで推定したのは、個体の「在不在」のみです。
+
+空間明示捕獲再捕獲モデルは、個体の在不在に加え、個体ごとによく存在する場所（活動中心）を推定します。活動中心は、GPS追跡調査などで得られるホームレンジの中心と解釈できるでしょう。そして、解析者が任意の空間的な範囲を設定し、その範囲内に存在する活動中心の数を、個体数の推定値とします。
+
+ここでは、自動撮影カメラによるツキノワグマのモニタリングを実施し（図\ref{bear}, \ref{camera}）、空間明示捕獲再捕獲モデルによって個体密度を推定するという状況を想定します。
+\begin{figure}[htb]
+\begin{tabular}{ccc}
+\begin{minipage}[t]{0.45\hsize}
+\centering
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=7cm,clip]{bear.jpg}
+\caption{自動撮影カメラで撮影されたツキノワグマ}
+\label{bear}
+\end{minipage}
+\begin{minipage}{0.2\hsize}
+\end{minipage}
+\begin{minipage}[t]{0.45\hsize}
+\centering
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=3.7cm,clip]{camera.jpg}
+\caption{自動撮影カメラ}
+\label{camera}
+\end{minipage}
+\end{tabular}
+\end{figure}
+
+\subsection{個体の活動中心の位置の決め方}
+個体の活動中心の位置は、どのように決定すればいいのでしょうか。感覚的には、ある個体が複数のカメラで撮影されており、かつ撮影枚数がカメラごとに異なっていれば、撮影枚数が多いカメラのより近くに個体の活動中心が存在すると考えられます。
+
+これはすなわち、カメラから活動中心が離れるほど、検出率が減少することを意味しています。距離に従って検出率が低下することを表現する関数には、様々な関数が存在します。本講義では、以下のような半正規関数を用います。
+\begin{equation}
+g(d) = \exp(-\dfrac{d^{2}}{2\sigma^{2}})
+\end{equation}
+
+\subsection{データの生成}
+では、ツキノワグマのカメラトラップ調査で得られるデータを生成しましょう。
+\begin{verbatim}
+set.seed(2)
+## 個体数を推定したい空間的な範囲を設定
+xl <- -12
+xu <- 12
+yl <- -12
+yu <- 12
+# 推定範囲に存在する真の個体数
+N <- 10
+# 個体ごとの活動中心の位置の設定
+ac_x <- runif(N, xl, xu)
+ac_y <- runif(N, yl, yu)
+## 調査機会数
+Nsc <- 6
+## カメラのID、x座標、y座標を設定
+Cam_id <- paste("C", formatC(1:100, width=2, flag="0"), sep="")
+cam_x <- rep(((-5):4)*2+1, 10)
+cam_y <- rep(((-5):4)*2+1, each=10)
+Ncam <- length(cam_x)
+
+## 個体（i）、カメラ（j）、調査機会（k）ごとの撮影枚数データの生成
+# カメラとの距離が0の場合の検出率
+lam0 <- 0.1
+# カメラからの距離に応じた検出率の減衰関数である
+# 半正規関数の分散パラメータ
+sigma <- 1.5
+# 各個体の活動中心と各カメラの距離を格納する箱
+D2 <- matrix(0, ncol=Ncam, nrow=N)
+# 検出率を格納する箱
+lambda <- matrix(0, ncol=Ncam, nrow=N)
+# 生成する撮影枚数データを格納する箱
+y <- array(dim=c(N, Ncam, Nsc))
+# 撮影枚数データの生成
+for (i in 1:N) {        # 個体
+  for (j in 1:Ncam) {   # カメラ
+    # 各個体の活動中心と各カメラの距離の2乗を計算
+    D2[i,j] <- (ac_x[i]-cam_x[j])^2 + (ac_y[i]-cam_y[j])^2
+    # 半正規関数による、距離に応じた検出率の減衰
+    lambda[i,j] <- lam0*exp(-D2[i,j]/(2*sigma*sigma))
+    for (k in 1:Nsc) {  # 調査機会
+      y[i,j,k] <- rpois(1,lambda[i,j])
+    }
+  }
+}
+# 1枚も撮影されていない個体は検出できないので、データから削除
+yobs <- y[apply(y,1,sum)>0,,]
+\end{verbatim}
+
+生成したデータは、以下のようなデータです（全体の一部を示します）。3次元（\verb|,,1|）は調査機会を表し、各調査機会における行はツキノワグマ個体、列はカメラを表します。全体的に検出数が少ないのでわかりにくいですが、下の例ではツキノワグマの4番目の個体が1番目のカメラに1回目の調査機会（\verb|,,1|）で1枚、4番目の個体が2番目のカメラに5回目の調査機会（\verb|,,5|）で2枚撮影されています。
+\begin{verbatim}
+head(yobs[, 1:4,])
+, , 1
+
+     [,1] [,2] [,3] [,4]
+[1,]    0    0    0    0
+[2,]    0    0    0    0
+[3,]    0    0    0    0
+[4,]    1    0    0    0
+[5,]    0    0    0    0
+[6,]    0    0    0    0
+
+, , 2
+
+     [,1] [,2] [,3] [,4]
+[1,]    0    0    0    0
+[2,]    0    0    0    0
+[3,]    0    0    0    0
+[4,]    0    0    0    0
+[5,]    0    0    0    0
+[6,]    0    0    0    0
+
+, , 3
+
+     [,1] [,2] [,3] [,4]
+[1,]    0    0    0    0
+[2,]    0    0    0    0
+[3,]    0    0    0    0
+[4,]    0    0    0    0
+[5,]    0    0    0    0
+[6,]    0    0    0    0
+
+, , 4
+
+     [,1] [,2] [,3] [,4]
+[1,]    0    0    0    0
+[2,]    0    0    0    0
+[3,]    0    0    0    0
+[4,]    0    0    0    0
+[5,]    0    0    0    0
+[6,]    0    0    0    0
+
+, , 5
+
+     [,1] [,2] [,3] [,4]
+[1,]    0    0    0    0
+[2,]    0    0    0    0
+[3,]    0    0    0    0
+[4,]    0    2    0    0
+[5,]    0    0    0    0
+[6,]    0    0    0    0
+
+, , 6
+
+     [,1] [,2] [,3] [,4]
+[1,]    0    0    0    0
+[2,]    0    0    0    0
+[3,]    0    0    0    0
+[4,]    0    0    0    0
+[5,]    0    0    0    0
+[6,]    0    0    0    0
+\end{verbatim}
+また、調査範囲、カメラの位置、ツキノワグマの活動中心と撮影したカメラの関係は、図\ref{data_secr}のようになっています。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=15cm,clip]{data_secr.pdf}\\
+%\includegraphics[width=40\zw,clip]{ranef_post_2.eps}\\
+\caption{空間明示捕獲再捕獲モデルのために生成したデータ}
+\label{data_secr}
+\begin{flushleft}
+\scriptsize 点線で囲まれた領域が、今回の個体数推定の対象範囲である。実践は、個体の活動中心と、その個体を撮影したカメラをつないでいる。ACは活動中心（Activity center）の略語である。
+\end{flushleft}
+\end{center}
+\end{figure}
+
+\subsection{階層モデルで表現した空間明示捕獲再捕獲モデル}
+閉鎖個体群なので、個体数は捕獲再捕獲モデルと同様、データ拡大法で推定します。捕獲再捕獲法と異なるのは、検出率が個体の活動中心の位置とカメラとの距離の関係から決まるという点です。それに伴い、活動中心の位置に関するモデルも必要になります。特に事前の情報が無い場合、調査対象範囲内に均等な確率で活動中心が位置するという仮定が妥当と考えられます。
+
+以上の説明をふまえ、空間明示捕獲再捕獲モデルを階層モデルとして表現すると、以下のとおりです。
+\subsubsection*{過程モデル}
+\begin{align}
+w_{i} &\sim \mathrm{Bernoulli}(\psi): \text{ wiは個体の在不在を示す} \\
+N &= \sum_{i=1}^{M} w_{i} \\
+sx_{i} &\sim \mathrm{Uniform}(\mathrm{左端}, \mathrm{右端}): \text{ 活動中心のx座標} \\
+sy_{i} &\sim \mathrm{Uniform}(\mathrm{下端}, \mathrm{上端}): \text{ 活動中心のy座標} \\
+\end{align}
+
+\subsubsection*{観測モデル}
+\begin{align}
+d_{ij}^{2} &= (sx_{i} - cx_{j})^{2} + (sy_{i} - cy_{j})^{2}: \text{ cxとcyはカメラのxy座標}\\
+\mu_{ij} &= \lambda \exp(-\dfrac{d_{ij}^{2}}{2\sigma^{2}}) \\
+y_{ijk} &\sim \mathrm{Poisson}(\mu_{ij} w_{i})
+\end{align}
+
+\subsection{データの拡大}
+では、先ほどの観測データを空間明示捕獲再捕獲モデルで解析するため、データ拡大します。
+\begin{verbatim}
+# データ拡大
+# 観察個体の4倍の個体を加える
+naug <- nrow(yobs)*4
+M <- nrow(yobs) + naug
+yaug <- array(0,dim=c(M,Ncam,Nsc))
+yaug[1:nrow(yobs),,] <- yobs
+\end{verbatim}
+
+	\subsection{BUGS言語によるモデルの記述}
+\begin{exercise}{BUGS言語による空間明示捕獲再捕獲モデルの記述}{secr_ex1}
+以下のコードの下線部分（\verb|____|）を埋めて、上記の空間明示捕獲再捕獲モデルをBUGS言語で記述せよ。
+\begin{verbatim}
+library(nimble)
+modelcode <- nimbleCode(
+{
+# 含有率の事前分布
+psi ~ dunif(0, 1)
+# 個体の活動中心の位置の事前分布
+for (i in 1:M) {
+  AC_x[i] ~ dunif(xl, xu)
+  AC_y[i] ~ dunif(yl, yu)
+}
+# 個体群が調査範囲に存在するかしないかを推定
+for (i in 1:M) {
+    w[i] ~  dbern(psi)
+}
+
+# 検出率の事前分布
+lam0 ~ dunif(0, 100)
+# 半正規関数の分散パラメータの事前分布
+sigma ~ dunif(0, 100)
+# 個体の在不在と、カメラからの距離に応じた検出率から、
+# 個体（i）かつカメラ（j）かつ調査機会（k）
+# ごとの撮影枚数データを説明する
+for (i in 1:M) {                # 個体
+  for (j in 1:Ncam) {           # カメラ
+    # カメラと活動中心の距離の2乗を計算
+    D2[i,j] <- (____ - ____)^____ + (____ - ____)^____
+    # 半正規関数による距離に応じた検出率
+    mu[i,j] <- lam0*exp(-D2[i,j]/(2*(____^____)))*w[i]
+    for (k in 1:Nsc) {
+      y[i,j,k] ~ dpois(mu[i,j]) # データはポアソン分布に従う
+    }
+  }
+}
+## 導出パラメータ
+N <- sum(w[1:M])                   # 真の個体数は在（w=1）である個体数
+D <- N/((xu-xl)*(yu-yl))        # 個体密度はN/調査範囲
+}                               # モデルの記述はここまで
+)
+\end{verbatim}
+\end{exercise}
+
+	\subsection{NIMBLEによるパラメータの推定}
+\begin{verbatim}
+# データの準備
+list_data <- list(y=yaug)
+list_cons <- list(M=M, Ncam=Ncam, Nsc=Nsc,
+                  cam_x=cam_x, cam_y=cam_y, xl=xl, xu=xu, yl=yl, yu=yu
+)
+
+# Initial values
+init1 <- list(sigma=2, psi=0.5,
+  AC_x=runif(list_cons$M, list_cons$xl, list_cons$xu),
+  AC_y=runif(list_cons$M, list_cons$yl, list_cons$yu),
+  w=rep(1, list_cons$M), lam0=0.1
+)
+init2 <- list(sigma=1, psi=0.4,
+  AC_x=runif(list_cons$M, list_cons$xl, list_cons$xu),
+  AC_y=runif(list_cons$M, list_cons$yl, list_cons$yu),
+  w=rep(1, list_cons$M), lam0=0.05
+)
+init3 <- list(sigma=4, psi=0.6,
+  AC_x=runif(list_cons$M, list_cons$xl, list_cons$xu),
+  AC_y=runif(list_cons$M, list_cons$yl, list_cons$yu),
+  w=rep(1, list_cons$M), lam0=0.2
+)
+inits <- list(init1, init2, init3)
+
+parameters <- c("sigma", "psi", "AC_x", "AC_y", "w", "lam0", "N", "D")
+
+nc <- 3
+ni <- 3000
+nb <- 1000
+nt <- 2
+
+out4 <- nimbleMCMC(code=modelcode,
+                  data=list_data,
+                  constants=list_cons,
+                  inits=inits,
+                  monitors=parameters,
+                  niter = ni,
+                  nburnin = nb,
+                  thin = nt,
+                  nchains = nc,
+                  progressBar = TRUE,
+                  samplesAsCodaMCMC = TRUE,
+                  summary = TRUE,
+                  WAIC = FALSE
+)
+\end{verbatim}
+
+\subsection{推定結果の検証}
+推定が妥当か、確認しましょう。$\hat{R}$は1.1未満となり、定常状態に達しているようです。
+\begin{verbatim}
+library(coda)
+resdf <- as.data.frame(out4$summary$all.chain)
+GR.diag <- gelman.diag(out4$samples, multivariate = FALSE)
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+\end{verbatim}
+また、設定値と推定結果を比較すると、全てのパラメータについて、おおむね設定値どおりに推定できたことがわかります（図\ref{CR_validation}）。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=15cm,clip]{secr_validation.pdf}\\
+\caption{設定値と推定結果の比較}
+\label{secr_validation}
+\end{center}
+\end{figure}
+
+活動中心の位置についても、おおむね設定位置を推定できているようです（図\ref{estAC}）。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{4_hm/figs/}}
+\includegraphics[width=15cm,clip]{estAC.pdf}\\
+\caption{設定値と推定結果の比較}
+\label{estAC}
+\end{center}
+\end{figure}
+
+\clearpage
+\section{発展的な話題}
+この節では、階層モデルそのものではないですが、いくつか技術的に高度な話題を紹介します。紹介するのは、以下の項目です。
+\begin{itemize}
+  \item ベイズp値
+  \item 空間相関
+  \item 並列化
+\end{itemize}
+\subsection{ベイズp値}
+ベイズp値とは、データへのモデルの当てはまりを測る指標の一つです。
+\begin{itemize}
+\item データと、モデルから予測される予測値の不一致度を計算する（実データとの不一致度）。
+\item モデルから新たなデータを作る。そして、その新しいデータとモデルから予測される予測値の不一致度を計算する（複製データとの不一致度）。
+\item 実データとの不一致度と複製データとの不一致度を比較する（比較結果を集計したものがベイズp値）。
+\end{itemize}
+実データとの不一致度と複製データとの不一致度を比較すると、もしモデルがデータを生成するモデルとして正しければ、実データとの不一致の方が複製データとの不一致度よりも大きい場合と小さい場合がほぼ半々で生じると考えられます。このため、ベイズp値が0.5に近ければそのモデルはデータをよく表現していると言えます。不一致度の計算方法は確率分布に応じて複数開発されています。詳しくは、K\'{e}ry and Schaub（2016）の7章、12章を参照して下さい。
+
+以下では、ベイズp値を使ったモデルの当てはまりを計算します。題材として、二項混合モデルを用います。
+
+\begin{verbatim}
+# 標準的な二項混合モデル
+#データの生成
+set.seed(1)
+# 調査箇所数
+Nsite <- 25
+# 調査機会数
+Nrep <- 20
+# 検出率の平均
+p_det <- 0.6
+# 平均個体群サイズlambda
+lambda <- 30
+# 過程モデルに従って局所個体数を生成
+N <- rpois(Nsite, lambda)
+# 調査箇所（i）かつ調査機会ごとの係数値を格納する箱
+y <- matrix(NA, nrow=Nrep, ncol=Nsite)
+# 調査箇所（i）かつ調査機会ごとの係数値を生成
+for (i in 1:Nsite) {
+  y[, i] <- rbinom(Nrep, N[i], p_det)
+}
+
+# BUGS言語によるモデルの記述
+library(nimble)
+modelcode <- nimbleCode(
+{
+# 過程モデル
+for (i in 1:Nsite) {
+  # 調査箇所ごとの局所個体数は
+  # 平均個体数からポアソン分布に従って得られる
+  EN[i] ~ dpois(meanN)
+}
+# 平均個体数の事前分布
+meanN ~ dunif(0, 1000)
+
+# 観測モデル
+# 検出率の事前分布
+estp ~ dunif(0, 1)
+for (i in 1:Nsite) {        # 調査箇所
+  for (j in 1:Nrep) {       # 調査機会
+    # 調査箇所（i）かつ調査機会（j）ごとの計数値
+    y[j, i] ~ dbin(estp, EN[i])
+    # モデルの当てはまりを評価するための
+    # ベイズp値の計算に必要な値を導出
+    # モデルの期待値
+    esty[j, i] <- estp*EN[i]
+    # データと期待値の不一致度
+    E[j, i] <- pow((y[j, i] - esty[j, i]), 2)/(esty[j, i] + 0.5)
+    # モデルに従って乱数により新しいデータを生成
+    y_new[j, i] ~ dbin(estp, EN[i])
+    # モデルの期待値（上と全く同じ）
+    esty_new[j, i] <- estp*EN[i]
+    # 新しいデータと期待値の不一致度
+    E_new[j, i] <- pow((y_new[j, i] - esty_new[j, i]), 2)/(esty_new[j, i] + 0.5)
+  }
+}
+# ベイズp値関連の計算
+fit_data <- sum(E[1:Nrep, 1:Nsite])      # 実データの不一致度を合計
+fit_new <- sum(E_new[1:Nrep, 1:Nsite])   # 新しいデータの不一致度を合計
+} #モデルの記述はここまで
+)
+
+# データの準備
+list_data <- list(y=y)
+list_cons <- list(Nsite=Nsite, Nrep=Nrep)
+
+#初期値を与える
+init1 <- list(EN=rpois(Nsite, lambda)+10, meanN=lambda+10, estp=0.5)
+init2 <- list(EN=rpois(Nsite, lambda)+8, meanN=lambda+8, estp=0.9)
+init3 <- list(EN=rpois(Nsite, lambda)+15, meanN=lambda+15, estp=0.7)
+inits <- list(init1, init2, init3)
+
+#監視対象パラメータを設定する
+parameters <- c("EN", "meanN", "estp", "fit_data", "fit_new")
+
+
+## MCMC法の設定
+nc <- 3
+nb <- 10000
+ni <- 20000
+nt <- 10
+
+# MCMC法の実行
+outnmix <- nimbleMCMC(code=modelcode,
+                  data=list_data,
+                  constants=list_cons,
+                  inits=inits,
+                  monitors=parameters,
+                  niter = ni,
+                  nburnin = nb,
+                  thin = nt,
+                  nchains = nc,
+                  progressBar = TRUE,
+                  samplesAsCodaMCMC = TRUE,
+                  summary = TRUE,
+                  WAIC = FALSE
+)
+
+###計算結果の出力
+# 要約量の計算
+library(coda)
+resdf <- as.data.frame(outnmix$summary$all.chain)
+GR.diag <- gelman.diag(outnmix$samples, multivariate = FALSE)
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+
+# Bayesian p valueの計算
+mean(unlist(outnmix$samples[,"fit_data"]) > unlist(outnmix$samples[,"fit_new"]))
+\end{verbatim}
+今回はモデルを1つしか用意していないため、この値について議論することにはあまり意味がありません。実際の解析において、あるデータに対して複数のモデルが考えられ、当てはまりがよりよりモデルを選びたい時に、ベイズp値が有効かもしれません。
+
+	\subsection{空間相関}
+何かしらの測定を複数の場所で行った際、それらの場所が近接しているなどの理由で、場所を相互に独立と見做せない状況が生じます。そのような場合、場所間の近さなどを表現する隠れ変数を導入することで、場所の効果を考慮することが可能です。
+
+場所の効果を考慮するモデルは複数開発されていますが、NIMBLEでは条件付き自己回帰（Intrinsic Conditional AutoRegressive; ICAR）モデルを適用することが可能です。ICARモデルの式は、以下の通りです。
+\begin{equation}
+\phi_{p} | \phi_{j}, j \neq p \sim \mathrm{N} \left( \dfrac{\sum_{j \in \delta_{p}} a_{pj} \phi_{j}}{a_{p+}}, \dfrac{\sigma^{2}}{a_{p+}} \right)
+\end{equation}
+$a_{pj}$はある場所$p$から見て場所$j$が隣であるかを示す指示変数（隣なら1、そうでなければ0）、$\delta_{p}$は場所pから見て隣である場所の名前、$a_{p+}$は場所pから見て隣である場所の数です。「隣」の範囲については、解析者が任意に設定することができます。
+
+上記の式から明らかなように、ICARモデルは隣と定義した場所について隣との類似性を表現し、隣でない場所については全く考慮しません。
+
+NIMBLEでは、\verb|dcar_normal()|という関数が用意されています。以下では、二項混合モデルの個体数を決めるモデルにICARモデルを適用します。
+		\subsubsection{データの生成}
+\begin{verbatim}
+# 個体数量のモデルに共変量＋空間相関を入れる
+#データの生成
+set.seed(1)
+# 調査箇所数
+Nsite <- 25
+# 調査機会数
+Nrep <- 20
+# 検出率の平均
+p_det <- 0.6
+# 調査箇所の個体数量は、箇所ごとの食物量によって決まる
+food <- rnorm(Nsite, 0, 0.5)
+# 対数尺度での平均個体群サイズlog_lambda
+log_lambda <- log(30)
+# 過程モデルに従って局所個体数を生成
+N <- rpois(Nsite, exp(log_lambda + food))
+# 調査箇所（i）かつ調査機会ごとの係数値を格納する箱
+y <- matrix(NA, nrow=Nrep, ncol=Nsite)
+# 調査箇所（i）かつ調査機会ごとの係数値を生成
+for (i in 1:Nsite) {
+  y[, i] <- rbinom(Nrep, N[i], p_det)
+}
+\end{verbatim}
+		\subsubsection{位置関係の指定}
+上記のように、ICARモデルは隣接する場所との値の類似性を表現するモデルです。そのため、場所同士の関係性をNIMBLEに指定する必要があります。具体的には、以下のデータを用意します。
+\begin{description}
+  \item[ある場所から見て隣である場所の番号]BUGS言語で扱う都合上、数字で指定してください。
+  \item[ある場所から見て隣である場所の総数]
+  \item[隣接場所の総数]
+  \item[隣である場合の重みづけ]今回は隣なら全て等しく1の重みとしています。
+\end{description}
+では、実際にこれらのデータを生成しましょう。今回は、ある場所から見た時に、上下と斜め方向で隣接する場所を隣と指定します。といっても、1つ1つ手作業で指定するのは困難ですので、場所のxy座標を使って、場所同士の距離を計算し、隣かどうかを自動で判定させます。場所と場所の距離は1に設定しているので、斜め方向も隣になるように、以下のコードでは隣かどうかの閾値を1.6に設定しています。
+\begin{verbatim}
+## 空間相関関係の設定
+# 調査箇所のx座標
+X <- rep(1:5, 5)
+# 調査箇所のy座標
+Y <- rep(1:5, each=5)
+plotid <- 1:Nsite
+plotdf <- data.frame(plotid=plotid, x=X, y=Y)
+
+# dcar_normal()関係の設定
+#---------------------------------------#
+adj <- NULL
+num <- NULL
+for (i in 1:nrow(plotdf)) {
+     plotdf$dist <- sqrt((plotdf$x - plotdf[i, "x"])^2 + (plotdf$y - plotdf[i, "y"])^2)
+     temp <- plotdf[plotdf$dist > 0 & plotdf$dist < 1.6, "plotid"]
+     adj <- c(adj, temp)
+     num <- c(num, length(temp))
+}
+L <- length(adj)
+weights <- rep(1, L)
+#---------------------------------------#
+
+# 計数データを、空間構造が出るように並べ替え
+N <- N[order(N)]
+\end{verbatim}
+		\subsubsection{BUGS言語によるモデルの指定}
+個体数に共変量がある二項混合モデルを基本としますが、ここでは共変量の代わりに空間相関パラメータを使います。
+\begin{verbatim}
+library(nimble)
+modelcode <- nimbleCode(
+{
+# 過程モデル
+for (i in 1:Nsite) {
+  # 調査箇所ごとの局所個体数は
+  # 箇所の食物量と平均の個体数量で決まる
+  lambda[i] <- exp(log_lambda + rho[i])
+  EN[i] ~ dpois(lambda[i])
+}
+# 対数尺度での平均個体数の事前分布
+log_lambda ~ dnorm(0.0, 1.0E-3)
+# 食物量の係数
+#bF ~ dnorm(0.0, 1.0E-3)
+# 空間相関
+rho[1:Nsite] ~ dcar_normal(adj[1:L], weights[1:L], num[1:Nsite], tau, zero_mean = 1)
+tau <- pow(sigma, -2)
+sigma ~ dunif(0, 100)
+
+# 観測モデル
+# 検出率の事前分布
+estp ~ dunif(0, 1)
+for (i in 1:Nsite) {        # 調査箇所
+  for (j in 1:Nrep) {       # 調査機会
+    # 調査箇所（i）かつ調査機会（j）ごとの係数値
+    y[j, i] ~ dbin(estp, EN[i])
+  }
+}
+} #モデルの記述はここまで
+)
+\end{verbatim}
+\verb|dcar_normal()|関数には、先ほど生成した位置関係のデータを渡します。\verb|zero_mean=1|というのは、空間相関パラメータの平均を0とするかどうかを指定しています（この場合は0にしています）。
+		\subsubsection{NIMBLEによるパラメータ推定}
+以降は、これまでと同様の流れです。
+\begin{verbatim}
+# データの準備
+list_data <- list(y=y)
+list_cons <- list(Nsite=Nsite, Nrep=Nrep, adj=adj, num=num, L=L, weights=weights)
+
+# 初期値の設定
+init1 <- list(EN=rpois(Nsite, exp(log_lambda+food))+5, log_lambda=log(5),
+                 estp=0.5, sigma=1, rho=rnorm(Nsite, 0, 0.01))
+init2 <- list(EN=rpois(Nsite, exp(log_lambda+food))+3, log_lambda=log(3),
+                 estp=0.2, sigma=0.5, rho=rnorm(Nsite, 0, 0.01))
+init3 <- list(EN=rpois(Nsite, exp(log_lambda+food))+10, log_lambda=log(10),
+                 estp=0.7, sigma=2, rho=rnorm(Nsite, 0, 0.01))
+inits <- list(init1, init2, init3)
+
+# 監視対象パラメータの
+parameters <- c("EN", "log_lambda", "estp", "rho")
+
+# MCMC法の条件設定
+nc <- 3
+nb <- 15000
+ni <- 30000
+nt <- 15
+
+# MCMC法の実行
+# 計算時間を記録する
+start.time <- Sys.time()
+outnmix_car <- nimbleMCMC(code=modelcode,
+                  data=list_data,
+                  constants=list_cons,
+                  inits=inits,
+                  monitors=parameters,
+                  niter = ni,
+                  nburnin = nb,
+                  thin = nt,
+                  nchains = nc,
+                  progressBar = TRUE,
+                  samplesAsCodaMCMC = TRUE,
+                  summary = TRUE,
+                  WAIC = FALSE
+)
+end.time <- Sys.time()
+elapsed.time <- difftime(end.time, start.time, units='hours')
+cat(paste(paste('Posterior computed in ', elapsed.time, sep=''), ' hours\n', sep=''))
+\end{verbatim}
+	\subsection{並列化}
+MCMC法はすでに説明したように、複数の連鎖を計算する必要があります。そして、これらの連鎖の計算は、相互に独立に行う必要があります。最近のCPUは複数のコアを持っているので、連鎖ごとに異なるコアに計算させれば、計算時間を短縮することができます。
+
+NIMBLEは、残念ながら標準では並列計算を行うようにはできていません。そのため、一般的な並列化関数を用いて、自分で並列計算するためのコードを書く必要があります。
+
+以下では、先ほどのICARモデルを並列化した場合のコードを掲載します。ただし、これは飯島が独自に書いたもので、正確性については保証できません。
+\begin{verbatim}
+run_MCMC_allcode <- function(seed, code, data, cons, init, parameters, ni, nb, nt) {
+  library(nimble)
+  myModel <- nimbleModel(code = code,
+                          data = data,
+                          constants = cons,
+                          inits = init #list(a = 0.5, b = 0.5))
+  )
+  CmyModel <- compileNimble(myModel)
+
+  myMCMC <- buildMCMC(CmyModel, monitors=parameters)
+  CmyMCMC <- compileNimble(myMCMC)
+
+  results <- runMCMC(CmyMCMC, niter=ni, nburnin=nb, thin=nt, setSeed=seed)
+
+  return(results)
+}
+
+seednum <- 1:3
+
+params <- list("run_MCMC_allcode", "nimbleModel", "compileNimble",
+               "buildMCMC", "runMCMC", "modelcode",
+               "list_data", "list_cons", "inits", "parameters",
+               "nb", "nt", "ni", "seednum")
+
+# 汎用的な並列化パッケージであるsnowを使う
+library(snow)
+cl <- makeCluster(3, type = "SOCK")
+clusterExport(cl, params)
+# Start
+start.time <- Sys.time()
+out <- parLapply(cl=cl, 1:3,
+                          function(x) run_MCMC_allcode(code=modelcode,
+                          data=list_data, cons=list_cons, init=inits[[x]],
+                          parameters=parameters, ni=ni,
+                          nb=nb, nt=nt, seed=seednum[x])
+)
+end.time <- Sys.time()
+elapsed.time <- difftime(end.time, start.time, units='hours')
+cat(paste(paste('Posterior computed in ', elapsed.time, sep=''), ' hours\n', sep=''))
+stopCluster(cl)
+library(coda)
+# mcmcリストとして結果をまとめる
+post <- mcmc.list(lapply(1:nc, function(x) as.mcmc(out[[x]])))
+\end{verbatim}
+環境にもよりますが、計算時間は単一コアの場合と比べて半分ぐらいになると思います。複雑なモデルでは計算時間は1日を超えることもありますので、並列化の恩恵は大きいです。
+
+並列計算はここまでですが、並列計算するために連鎖ごとにオブジェクトを分割しているので、まとめる必要があります。以下では、Stan本の著者である\href{https://statmodeling.hatenablog.com/entry/jags-mcmclist2bugs}{松浦さんのブログ}に掲載されていた関数を使わせていただき、事後要約量などを計算しています。
+\begin{verbatim}
+# Define the fuction of mcmc.list2bugs()
+library(R2WinBUGS)
+
+mcmc.list2bugs <- function(mcmc.list)
+{
+   b1 <- mcmc.list[[1]]
+   m1 <- as.matrix(b1)
+   mall <- matrix(numeric(0), 0, ncol(m1))
+   n.chains <- length(mcmc.list)
+   for (i in 1:n.chains) {
+      mall <- rbind(mall, as.matrix(mcmc.list[[i]]))
+   }
+   sims.array <- array(mall, dim = c(nrow(m1), n.chains, ncol(m1)))
+   dimnames(sims.array) <- list(NULL, NULL, colnames(m1))
+   mcpar <- attr(b1, "mcpar")
+   as.bugs.array(
+      sims.array = sims.array,
+      model.file = NULL,
+      program = NULL,
+      DIC = FALSE,
+      DICOutput = NULL,
+      n.iter = mcpar[2],
+      n.burnin = mcpar[1] - mcpar[3],
+      n.thin = mcpar[3]
+   )
+}
+# 定義したmcmc.list2bugs()を使って事後要約量を計算
+bugsres <- data.frame(mcmc.list2bugs(post)$summary)
+# Rhat値も計算
+bugsres$sig <- abs(sign(bugsres[, 3]) + sign(bugsres[, 7])) == 2
+\end{verbatim}

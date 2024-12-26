@@ -1,0 +1,1524 @@
+%\documentclass{jsarticle}
+%\AtBeginDvi{\special{pdf:tounicode 90ms-RKSJ-UCS2}}
+%\pagestyle{myheadings}
+%\usepackage[dvipdfm]{hyperref}
+%\usepackage{ascmac}
+%\usepackage{graphicx}
+%\usepackage{booktabs}
+%\usepackage{amsmath,amssymb}
+%\usepackage{makeidx}
+%\makeindex
+%\begin{document}
+
+%\title{Rの操作と統計解析の基礎}
+%\author{飯島勇人\footnote{（国研）森林総合研究所野生動物研究領域}
+%\footnote{連絡先: hayato.iijima@gmail.comまたはhayatoi@affrc.go.jp}}
+%\maketitle
+%\markright{Rによる統計解析}
+%\tableofcontents
+
+\part{基礎}
+\label{basic}
+\section{はじめに}
+\ref{basic}部は、初学者が\texttt{R}を使ってある程度のデータ解析をできるように
+なることを目的としています。そのために、\texttt{R}の基本的な使い方と、基礎的な統計解析について説明します。
+
+\texttt{R}は、基本的にマウスで操作するのでなく、ファイルを読み込んだり図を書いたりといった
+あらゆる作業を、コマンドで入力します。マウス操作に慣れた方は、コマンドを覚えたりコマンドによる
+操作が苦痛に感じられると思います。ですが、後述するようにコマンドによる操作は利点もあります。
+
+  \subsection{データファイルを置く場所と場所の指定}
+    \subsubsection{ファイルを置く場所}
+基本的には、好きな場所で構いません。ただし、個人的な流儀の問題になりますが、飯島は以下のようなフォルダ構造を構築した上で、データを「data」というフォルダに格納することをお勧めしています。
+
+\begin{itemize}
+  \item 自分が好きな場所に、あるプロジェクトの起点となるフォルダを作成する。プロジェクトとは、1つのまとまった仕事（例：論文）が終了するまで使う一連のファイルが置かれているフォルダとする。今回のセミナーを一連のプロジェクトと見立て、まず\verb|R_lec|というフォルダを作る。
+  \item その中に、\texttt{data}というフォルダを作る。同じ階層に、飯島は\texttt{codes}というフォルダ（のちに説明する、\texttt{R}に出す命令を書いたファイル）と、\texttt{paper}というフォルダ（論文の原稿や論文中で使う図表などを置くフォルダ）を作ることが多いです。
+  \item ファイルサイズが大きいデータを扱う場合、上記の基本フォルダがクラウド（Dropboxなど）にある場合は、別途自分のPCのハードディスクやNAS（\verb|R_lec_local|のような名称とする）に置く。
+\end{itemize}
+
+飯島の場合、さまざまな場所、PCで作業することが多いため、以下のようなクラウド環境に置いています。
+
+\begin{forest}
+ for tree={grow'=0,folder,draw}
+ [/
+  [hayatoiijima
+   [Library
+    [CloudStorage
+     [Box-Box
+      [\texttt{R\_lec}
+       [data
+        [camera]
+        [\texttt{L03-b-14-xxxx}]
+        [\texttt{data.xlsx}, draw=none]
+        [\texttt{N03-20240101\_19.shp}, draw=none]
+       ]
+       [codes
+        [\texttt{code.R}, draw=none]
+       ]
+       [paper]
+      ]
+     ]
+    ]
+   ]
+   [\texttt{R\_stat\_local}
+    [重たいファイルとか, draw=none]
+   ]
+ ]
+]
+\end{forest}
+
+    \subsubsection{データファイルの場所の指定}
+上記で、データ（とそれを扱うプロジェクトフォルダ）を好きな場所に配置しました。次は、データがある場所（フォルダ、ディレクトリ）を\texttt{R}に教えてあげる必要があります。教える方法にはいくつか選択肢があり、以下のとおりです。これらについて、説明します。
+\begin{itemize}
+  \item GUI上でデータがある場所を毎回指示する
+  \item コマンドでデータがある場所を毎回指示する（絶対パス）
+  \item コマンドでデータがある場所を毎回指示する（相対パス）
+\end{itemize}
+
+\texttt{R}では、以下のようにGUI上で使ってデータがある場所を指示することが可能です（図\ref{setwd1}）。以下の図はmacOSの場合ですが、Windowsの場合は画面の左上の「ファイル」から「ディレクトリの変更」を選択します。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{setwd1.png}\\
+\caption{マウスによる作業ディレクトリの指定}
+\label{setwd1}
+\end{center}
+\end{figure}
+
+\clearpage
+データの位置がほぼ固定の場合はこの方法でもいいと思いますが、データフォルダ内にもフォルダがある場合や、解析結果をファイルとして出力する場所が違う場合、その都度GUIで作業ディレクトリを指定することは煩雑です。一方、コマンドで指定できれば、あらかじめコマンドを書いておくことで効率的に指示ができます。\texttt{R}に作業ディレクトリを教える関数として、\index{setwd@\texttt{setwd()}}\texttt{setwd}関数があります。
+
+\texttt{setwd}による最も単純な指定は、作業ディクトリまでのパスを以下のように全て書き下すことです。
+
+\begin{itembox}[l]{絶対パスによる作業ディレクトリの指定}
+\begin{verbatim}
+> setwd("/Users/hayatoiijima/Library/CloudStorage/Box-Box/R_lec/")
+\end{verbatim}
+\end{itembox}
+
+この方法の場合、毎回パスを書く必要があり、やや煩雑です。そのためにも、コマンドを入力する際、いきなり\texttt{R}に文字を打ち込むのではなく、\textbf{必ずメモ帳などでテキストの形でコマンドを下書き}して、それをコピペすることで行ってください。コードを残しておくと、間違っていた際の修正に便利です。また、\verb|#|という記号の後は\texttt{R}の中で無視されます（コメントアウト）。そのため、コード中に日本語で何をする操作なのか書き込んで、コメントアウトして残しておくことができます。早速、コマンドを打ち込むためのテキストファイルを、各自で用意しましょう。
+
+仮に作業ディレクトリの指定をGUIで行うつもりの人でも、データの読み込みや作図などで多数のコマンドを使うことになりますので、コードファイルは必要です。さらに、コードファイルを作成することは、結果の再現性を担保する上で非常に重要な役割を果たします。近年、論文として発表した結果の再現可能性を担保することが、不正防止という観点から求められています。自身で不正をする気がなくても、論文を投稿する際に、生データと生データから結果を得るまでの過程を開示するように求められることがあります。このような点からも、コードとして作業過程を残しておくことは重要です。
+
+絶対パスによる指定は、自分以外の人とコードを共有する場合に、PCのディレクトリ構造が違っていたり、そもそもOSが違っていると不都合が生じます。
+
+これらの点を解消する記法が、相対パスです。相対パスとは、ある起点となる場所を定め、そこから「〜階層下のこのディレクトリ」のような指定をする方法です。そのため、まず「起点となるディレクトリ」を指定する必要があります。起点となるディレクトリを指定する方法は、いくつかあります。また、相対パスで指定する上では、\index{here@hereパッケージ}\texttt{here}パッケージの\index{here@\texttt{here()}}\texttt{here()}関数が便利です。
+
+\begin{itembox}[l]{起点となるフォルダの設定1}
+\begin{verbatim}
+> setwd("/Users/hayatoiijima/Library/CloudStorage/Box-Box/R_lec/")
+> library(here)
+\end{verbatim}
+\end{itembox}
+
+この方法の場合、最初の1回だけ絶対パスを指定すれば、あとは\texttt{here}パッケージによる相対記法を使うことができます。ですが、コードを異なるOSの人と共有する場合、区切り文字がOS間で異なるという問題があります。それを回避するためには、以下のような指定をします。
+
+\begin{itembox}[l]{起点となるフォルダの設定2}
+\begin{verbatim}
+> setwd(file.path(path.expand("~"), "Library", "CloudStorage", "Box-Box", "R_lec"))
+> library(here)
+\end{verbatim}
+\end{itembox}
+\index{pathexpand@\texttt{path.expand()}}\texttt{path.expand}は、作業しているPCのフォルダ構造を認識し、ホームフォルダ（ユーザー名直下）までのパスを取得してくれる関数です。もし自身のOSでどこが参照されるのか確認したいときは、\verb|> path.expand("~")|として確認して下さい。また、\index{filepath@\texttt{file.path()}}\texttt{file.path}は、OSを自動で認識し、ディレクトリ間の区切り文字をOSに適した形で与えてくれる関数です。
+
+どの方法にも一長一短がありますが、飯島は一番最後の記法を用います。これ以降のコードでは、皆様も上記の構造で作業しているとみなしてパスの指定などを行います。
+
+  \subsection{使うデータ}
+ここで使うデータについては、すでに配布しています。後ほど皆さんの手元でも読み込んでもらいますが、
+ひとまずどのようなデータか説明します。
+
+調査者は森林の研究者で、近年日本各地で個体数が増加しているニホンジカが森林動態に与える影響について
+調べようとしています。そこで、ニホンジカ密度が異なると思われる20の地域で、毎木調査と稚樹調査を行いました。
+1地域で、毎木調査は2箇所（1箇所のサイズは20$\times$20m）、毎木調査の箇所ごとに稚樹調査は
+5箇所（1箇所のサイズは2$\times$2m）で実施しました。仮説として、ニホンジカが多い地域では、
+ニホンジカによる樹皮剥ぎが多く、また稚樹の本数は少ないということを考えています。
+また、ニホンジカの個体数を調べるために、各地域に5台ずつ自動撮影カメラを設置しました。
+
+毎木調査の項目。
+\begin{description}
+  \item[\texttt{Region}]地域のID
+  \item[\texttt{Stand}]毎木調査箇所のID
+  \item[\texttt{Species}]調査した個体の樹種
+  \item[\texttt{DBH}]調査した個体の胸高直径（cm）
+  \item[\texttt{Debark}]剥皮されていれば1、されていなければ0
+\end{description}
+
+稚樹調査の項目。
+\begin{description}
+  \item[\texttt{Region}]地域のID
+  \item[\texttt{Stand}]毎木調査箇所のID
+  \item[\texttt{Quadrat}]稚樹調査箇所のID
+  \item[\texttt{H}]調査した個体の地上高（cm）
+  \item[\texttt{Species}]調査した個体の樹種
+\end{description}
+
+\section{まずは触ってみよう！}
+\label{begin}
+この章では\texttt{R}にデータを読み込んで、整形・加工する方法を学びます。
+\texttt{R}での作業の全ての基礎となります。
+  \subsection{パッケージ}
+\texttt{R}はそのままでも多くの機能を有していますが、追加的に必要な機能は「パッケージ」としてまとめられており、必要に応じて読み込む必要があります。
+
+これ以降で使うパッケージについて、先に読み込んでおきます。では、これが出ている状態で、パッケージを読み込んでみましょう。ここでは、データの操作性を高める\index{tidyverse@tidyverseパッケージ}\verb|tidyverse|パッケージ、およびExcel形式（\verb|.xls|および\verb|.xlsx|）ファイルを読み込む関数を含んでいる\index{readxl@readxlパッケージ}\verb|readexl|パッケージを読み込みます。
+
+\begin{itembox}[l]{パッケージの読み込み}
+\begin{verbatim}
+> library(tidyverse)
+> library(readxl)
+\end{verbatim}
+\end{itembox}
+
+以上のコマンドを打ち込んでエンターキーを押せば、パッケージが読み込まれます。
+  
+  \subsection{\texttt{R}にデータを読み込ませる方法}
+    \subsubsection{データファイルの作り方}
+\begin{itemize}
+ \item Excelなどにデータを打ち込む。
+ \item 各列に個体番号、環境条件などを入れる。
+ \item 1行目にはデータのラベルを入力する。
+ \item 基本的に空のセルを作らない（欠損値がある場合は空欄でもよいが、
+       \verb|NA|を入力しておいた方がいい）。
+ \item 違った形式（並べ方が異なる）のデータを同一ファイル内に混在させな
+       い。
+\end{itemize}
+
+    \subsubsection{\texttt{R}ではオブジェクトにデータを与える}
+\texttt{R}でデータを操作する基本単位は、\textgt{オブジェクト}です。オブジェ
+クト\index{オブジェクト}とは、「適当な文字」です。自分で適当につけた文字
+にデータをくっつけて、
+データをいじります。では、
+オブジェクトがどういうものか、試してみましょう。
+
+\begin{itembox}[l]{データの読み込み例（GUIで作業ディクトリを指定）}
+ \begin{verbatim}
+# ここでGUIで「data.xlsx」が保存されているディレクトリを指定
+> treedf <- read_excel("data.xlsx", sheet="Trees")
+# read_excel("ファイル名", sheet="読み込むシート名")という書き方
+\end{verbatim}
+\end{itembox}
+
+\begin{itembox}[l]{データの読み込み例（コマンドで絶対パスを指定）}
+ \begin{verbatim}
+# 絶対パスで作業ディレクトリを指定
+> setwd("/Users/hayatoiijima/Library/CloudStorage/Box-Box/R_lec/data/")
+> treedf <- read_excel("data.xlsx", sheet="Trees")
+# read_excel("ファイル名", sheet="読み込むシート名")という書き方
+\end{verbatim}
+\end{itembox}
+
+\begin{itembox}[l]{データの読み込み例（コマンドで相対パスを指定）}
+ \begin{verbatim}
+# 相対パスで作業ディレクトリを指定
+> setwd(file.path(path.expand("~"), "Library", "CloudStorage", "Box-Box", "R_lec"))
+> treedf <- read_excel(here("data", "data.xlsx"), sheet="Trees")
+# read_excel("ファイル名", sheet="読み込むシート名")という書き方
+\end{verbatim}
+\end{itembox}
+
+\begin{itemize}
+ \item 以上のように打ち込むことで、\textgt{treedfという文字}に毎木データ.csvの
+       データを\textgt{くっつける}ことができます。
+       \index{readexcel@\texttt{read\_excel()}}\verb|read_excel|は\verb|.xls|および\verb|.xlsx|形式のファイルを読み込むための関数です。
+ \item \verb|treedf|が\textgt{オブジェクト}です。
+ \item 本当に読み込めたのか、
+
+       \verb|> treedf|
+
+       で確認します。以下のようにデータが表示されるはずです。
+\begin{verbatim}
+# A tibble: 1,122 × 5
+   Region Stand   DBH Species        Debark
+   <chr>  <chr> <dbl> <chr>           <dbl>
+ 1 A      ST1    35.5 Genus_speciesM      0
+ 2 A      ST1    40.1 Genus_speciesO      0
+ 3 A      ST1    42.2 Genus_speciesD      0
+ 4 A      ST1    41.9 Genus_speciesG      0
+ 5 A      ST1    39.5 Genus_speciesA      0
+ 6 A      ST1    25.0 Genus_speciesQ      1
+ 7 A      ST1    43.7 Genus_speciesB      0
+ 8 A      ST1    45.2 Genus_speciesO      0
+ 9 A      ST1    35.2 Genus_speciesS      0
+10 A      ST1    46.7 Genus_speciesS      0
+# \UTF{2139} 1,112 more rows
+# \UTF{2139} Use `print(n = ...)` to see more rows
+> \end{verbatim}
+ \item オブジェクトは、数字のみ、あるいは数字が先頭に来る文字以外なら何で
+       も構いません。
+ \item 詳細は後述しますが、\verb|read_excel()|関数で読み込んだデータはtibbleという形式です。tibbleは標準で、データの頭数行のみを表示する仕様となっています。もし、もっと多くのデータを表示させたい場合（例えば先頭から50行分）は
+       \verb|> print(treedf, n=50)|と打ってみて下さい。
+ \item これ以降のコードでは、行頭の\verb|>|は省略します。
+\end{itemize}
+
+    \subsubsection{作業・データの保存}
+作業内容（読み込んだデータや生成したオブジェクトなど）やコマンドの入力履
+歴をそのまま保存しておくことが出
+来ます。作業内容は、「ファイル」$\rightarrow$「作業スペースの保存」で
+\verb|.RData|という拡張子のファイルとして保存されます。\verb|.RData|には、
+読み込んだデータそのものが含まれています。
+\verb|.Rhistory|には、入力したコマンドの履歴だけが含まれています。
+
+\verb|.RData|は読み込んだデータそのものや計算結果も保存できるので、一連の解析が終わった後に\verb|.RData|として保存しておくと、結果を振り返るのに便利です。特に、ベイズ統計を使うようになると、モデルやデータ量によっては非常に計算に時間がかかるため、結果を保存しておく重要性が高くなります。ただし、パッケージはその都度読み込む必要があります。
+
+    \subsubsection{小技}
+\begin{itemize}
+	\item キーボードの上矢印を押すと一つ前に打ったコマンドが、下矢印を打つと先のコマンドが表示されます。
+	\item \verb|1:10|というように数字の間に\verb|:|をはさむと、左の数字から右の数字まで1ずつ変化する数列を生成できます（等差数列）。
+\end{itemize}
+
+  \subsection{まず体験してみる〜\texttt{R}と\texttt{tidyverse}で楽々データ操作〜}
+系統だった使い方の説明の前に、ひとまず\texttt{R}で簡単にできることを紹介したいと思います。
+上記のようなデータを取った後、みなさんだったら何を知りたいと思いますか？
+
+ちょっと考えただけでも、知りたいことがたくさんあると思います。例を挙げると、以下のような項目です。
+\begin{itemize}
+  \item 毎木プロットごとに、何個体調査したのか？
+  \item 毎木プロットごとに、何種出現したのか？
+  \item 毎木プロットごとに各種が何個体出現したのか？
+  \item 毎木プロットごとの胸高断面積合計は？
+\end{itemize}
+
+では、これらを\texttt{R}で調べてみましょう。まず、一番最初の「プロットごとの調査個体数」は、
+以下のように打ち込むことで得られます。
+\begin{verbatim}
+treedf %>%
+   group_by(Region, Stand) %>%
+   reframe(本数=n()) %>%
+   print(., n=40)
+\end{verbatim}
+\verb|...|早速、意味不明な文字列がたくさん出てきて、心が折れてしまった方もいるかも知れません（笑）。でも大丈夫です。1つずつ解説していきます。
+    \subsubsection{パイプライン処理}
+\verb|tidyverse|パッケージでは、あるオブジェクトに対する一連の処理を\verb|%>%|という記号でつなげて記述します。これは\index{ぱいぷえんざんし@パイプ演算子}パイプ演算子と呼ばれます。ある処理を行い、次の処理に渡すことができます。パイプ演算子によって、コードを直感的に記述することが可能になります。
+
+例えば、上記のコードの1行目は、毎木データを付与したオブジェクトに対して処理を行いますよ、ということを宣言していることになります。
+
+    \subsubsection{カテゴリーごとにデータを分割}
+2行目は、\index{groupby@\texttt{group\_by()}}\verb|group_by|という関数が使われています。これは、中に書かれた変数の「カテゴリーごとにデータを（仮想的に）分割する」ということを意味しています（仮想的、というところがポイントです）。ここでは、RegionとStandごとにデータを分割しました。\texttt{R}の組み込み関数である\verb|split|と似ています。これだけでは何が起きたのか分かりにくいかも知れません。次の処理に進んでみましょう。
+
+    \subsubsection{カテゴリーごとに任意の処理を行う}
+3行目は、\index{reframe@\texttt{reframe()}}\texttt{reframe}という関数が使われています。これは、カテゴリーごとに分割されたデータについて、\texttt{reframe}中に書かれた処理を行ってその単位にデータを集約する関数です。\texttt{R}の組み込み関数である\verb|tapply|と似ています。
+
+さて、では処理として何が行われているでしょうか。\index{n()@\texttt{n()}}\verb|本数=n()|と書かれています。\verb|n()|は行数を合計するという記法です。それを、「本数」という列として結果に付与するという意味になります。
+
+最後の列は、それを40行表示させるという関数です。これは、先ほど述べたように、tibbleの標準では先頭の数行しか表示しないためです。
+
+    \subsubsection{プロット毎の出現種数}
+では、次に出現種数を調べてみましょう。それを実行するコードは、以下のとおりです。
+\begin{itembox}[l]{プロット毎の出現種数}
+\begin{verbatim}
+treedf %>%
+   group_by(Region, Stand) %>%
+   reframe(種数=length(unique(Species))) %>%
+   print(., n=40)
+\end{verbatim}
+\end{itembox}
+先ほどと異なっているのは、3行目ですね。reframeでデータを集約する部分が異なっています。Speciesは、データに含まれている種を示す列です。uniqueはその中に入れたデータの中で固有の要素を調べる関数で、lengthはデータ数（ベクトルの長さ）を調べる関数です。プロットごとに、出現した種の一覧をuniqueで作成し、その一覧の長さ（数といってもいいと思います）をlengthで評価して、プロットごとの種数を得ることができました。
+
+\texttt{R}では、このように多種多様な関数が出てきます。その全てを覚えることは困難ですし、その必要もありません。よく使う関数だけ覚えておいて、それ以外は「こういった処理ができる関数は？」とChatGPTに聞けば、答えが返ってきます。
+
+    \subsubsection{プロットかつ種ごとの出現個体数}
+直前の例では「種数」のみを調べました。つまり、種の単位でみると「在不在」だけを調べたことになります。しかし、種ごとの個体数を知りたいこともあると思います。
+
+上で、データを（仮想的に）分割する関数として\verb|group_by|を学びました。これまでの例ではRegionかつStand単位でしたが、ここに「種（Species）」を加えれば良さそうです。では、以下のコードの空白部分に何が入るか、考えてみましょう。
+\begin{exercise}{プロットかつ種ごとの出現個体数の計算}{reframe1}
+\begin{verbatim}
+treedf %>%
+  group_by(Region, Stand, ______) %>%
+  reframe(個体数=___)
+\end{verbatim}
+\end{exercise}
+
+正しく指定ができていれば、以下のように表示されるはずです。
+
+\begin{verbatim}
+# A tibble: 594 × 4
+   Region Stand Species        個体数
+   <chr>  <chr> <chr>           <int>
+ 1 A      ST1   Genus_speciesA      2
+ 2 A      ST1   Genus_speciesB      3
+ （以下、省略）
+\end{verbatim}
+
+さて、目的は達成されましたが、人間にとっては視覚的にわかりにくいです。感覚的な言葉で言うと、データが縦方向に並んでいます。このデータを、行がSpecies、列がRegionごとのStandという行列になっていたらもう少しわかりやすくなると思います（このことを、横展開すると言います）。
+
+\texttt{R}では、このような「データの並び方の変換」も簡単です。以下で、上記の結果を行列の形に変換してみましょう。
+
+\begin{verbatim}
+treedf %>%
+  group_by(Region, Stand, Species) %>%
+  reframe(個体数=n()) %>%
+  pivot_wider(., id_cols="Species", names_from=c("Region", "Stand"),
+    values_from="個体数", values_fill=0)
+# A tibble: 20 × 41
+   Species     A_ST1 A_ST2 B_ST1 B_ST2 C_ST1 C_ST2 D_ST1 D_ST2 E_ST1 E_ST2 F_ST1 F_ST2 G_ST1 G_ST2
+   <chr>       <int> <int> <int> <int> <int> <int> <int> <int> <int> <int> <int> <int> <int> <int>
+ 1 Genus_spec…     2     1     4     1     0     1     2     0     3     1     1     0     1     0
+ 2 Genus_spec…     3     2     2     1     2     0     4     2     3     3     2     1     1     0
+（以下、省略）
+\end{verbatim}
+行列に展開することができました。ここで新しく、\verb|pivot_wider|という関数が出てきました。名前の通り、データを横方向に展開するための関数です。引数（ひきすう）の指定を説明します。
+
+\begin{description}
+  \item[\texttt{id\_cols}]横展開した時の「行」に該当する要素。複数の行で同じ値があってはいけない。
+  \item[\texttt{names\_from}]横展開した時に「列」に該当する要素。複数指定が可能。
+  \item[\texttt{values\_from}]横展開した行列に入る「値」。
+  \item[\texttt{values\_fill}]横展開した場合に、行と列の組み合わせが存在しないデータについて埋める値。
+\end{description}
+
+    \subsubsection{結果の出力}
+上記の例では、結果が\texttt{R}上に表示されました。ですが、これを論文や報告書などに貼りたいこともあると思います。\texttt{R}で操作した結果は、何かしら新しいオブジェクトとして、それを様々な形式で出力できます。ここでは、\verb|.xlsx|形式のファイルとして出力します。
+
+\begin{verbatim}
+# sptableというオブジェクトに結果を付与する
+sptable <- treedf %>%
+  group_by(Region, Stand, Species) %>%
+  reframe(個体数=n()) %>%
+  pivot_wider(., id_cols="Species", names_from=c("Region", "Stand"),
+    values_from="個体数", values_fill=0)
+# .xlsx形式で出力するためのパッケージの読み込み
+library(writexl)
+# 出力
+write_xlsx(sptable, "種_林分行列.xlsx")
+\end{verbatim}
+
+出力したファイルは、起点ディレクトリに保存されています（\verb|here|関数を使えば起点フォルダ内の任意の場所に保存できます）。他には、csvファイル形式で出力する\verb|write.csv()|という関数もあります。
+
+    \subsubsection{毎木プロットごとの胸高断面積合計}
+胸高断面積合計は、林分の蓄積量を表現する上でよく使われる指標です。毎木で出現した個体ごとに、胸高断面積を計算し、林分単位で合計することで計算できます。ただし、毎木の調査面積で値の意味が違ってきますので、1 haあたりの平方メートル（m$^{2}$）で表現されることが多いです。上で説明したように、毎木調査の1箇所あたりの面積は20m$\times$20mという設定です。また、個体のDBH（胸高直径）は、cm単位で記録されています。
+
+これらの点に留意し、プロットごとの胸高断面積合計を計算してみましょう。これまでと異なる部分もありますので、段階を踏んで説明します。まず、個体ごとに断面積（ただし、平方メートル単位）を計算してみましょう。
+
+\begin{exercise}{個体ごとの段面積の計算}{mutate1}
+\begin{verbatim}
+treedf %>%
+  mutate(断面積=3.14*(____/100/2)^2)
+\end{verbatim}
+\end{exercise}
+また新しい関数が出てきました。\verb|mutate|は、tibbleに「新しい列」を加える関数で、多用します。樹木の断面積を円と仮定すると、円の面積の公式に従って面積を計算することができます。ただし、のちに平方メートル単位の断面積合計を得るので、ここで平方メートル単位に変換してしまいます。上記のコードの欠けている部分を埋めて、計算しましょう。
+
+個体ごとの断面積が計算できたら、それをRegionかつStand単位で合計し、haあたりに変換すれば、断面積合計（m$^{2}/$ha）が計算できます。計算するコードは、以下のとおりです。
+
+\begin{exercise}{毎木プロットごとの胸高断面積合計の計算}{mutate2}
+\begin{verbatim}
+treedf %>%
+  mutate(断面積=3.14*(DBH/100/2)^2) %>%
+  group_by(_____, _____) %>%
+  ______(断面積合計=sum(____)/(20*20)*100*100)
+\end{verbatim}
+\end{exercise}
+ここで、\verb|sum|という新しい関数が出てきました。これは名前から推察できるかもしれませんが、合計値を計算してくれる関数です。正しく指定できれば、以下のような出力が得られます。
+
+\begin{verbatim}
+# A tibble: 40 × 3
+   Region Stand 断面積合計
+   <chr>  <chr>      <dbl>
+ 1 A      ST1         75.8
+ 2 A      ST2         63.2
+（以下、省略）
+\end{verbatim}
+
+調査データの概要を数字で掴むための操作を、\texttt{R}でやってみました。これらのことは、Excelでもできるしそちらの方が簡単だと言うご意見もあるかもしれません。しかし、\texttt{R}で実行すると、調査地が幾つあろうとも同じ書き方で表現できること、この後行う作図とも連携することができます。コマンドを書くことに慣れていないと非常に面倒なことをしているように感じるかもしれませんが、慣れるととても便利です。
+
+  \subsection{まず体験してみる2〜\texttt{R}と\texttt{ggplot}で楽々作図〜}
+上記のように数字で情報を取り出すことも重要ですが、視覚的にデータを確認することも重要です。毎木データを収集した時に、どんな図を描きたいでしょうか？
+
+\texttt{R}で作図する利点として、同じような図をコマンドで多数生成できることが挙げられます。以下では、プロット後のサイズ（DBH）構造を図にしてみます。個別の関数の説明は後述しますので、まずは以下のコードを打ち込んでみてください。
+
+\begin{itembox}[l]{プロット毎のサイズ構造}
+\begin{verbatim}
+p1 <- ggplot(data=treedf, aes(x=DBH))+
+  geom_histogram()+
+  facet_wrap(~ Region + Stand,
+    labeller = labeller(.cols = label_value, .multi_line = FALSE), ncol=6)+
+  theme_bw()
+p1
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=15cm,pagebox=cropbox,clip]{DBH_hist.pdf}\\
+\caption{プロットごとのサイズ構造}
+ \label{plot_size}
+\end{center}
+\end{figure}
+
+複数の同じ形式の図を、一瞬で描画することができました。しかも、x軸やy軸のラベルが、外側に位置する図にだけ描画されています（もちろん細かいことを言い出すとまだまだ直すところはあるのですが、それは後ほど）。少し、\texttt{R}が便利だと思えてきたのではないでしょうか？
+
+作成した図は、様々な形式で保存することが可能です。ここでは、PDFで出力する例を示します。
+\begin{verbatim}
+ggsave("DBH_hist.pdf", device=cairo_pdf)
+\end{verbatim}
+
+\clearpage
+\section{データ操作}
+以下では、ティブル形式を中心にデータの操作方法について解説します。
+
+  \subsection{部分的な選択や削除}
+ティブルはすでに説明したように、行列という2次元の形式のデータです。この一部を取り出したり、逆に削除したりすることはよくあります。そのためのいくつかの方法を紹介します。
+    \subsubsection{ティブルの特定の部分を選択}
+\begin{itembox}[l]{必要な列を指定}
+\begin{verbatim}
+# Region、Stand、Species列を指定
+treedf %>%
+  select(Region, Stand, Species)
+# 左からの列の位置を数字で指定することもできる
+treedf %>%
+  select(c(1:2, 4))
+\end{verbatim}
+\end{itembox}
+\verb|c()|は、その中に書いた要素をつなげる（ベクトル化する）ことができます。
+
+なお、この操作ではあくまでティブルという行列形式を維持して部分的にデータを抽出しましたが、そうではなく構造のないデータの塊（ベクトル）として取り出したい時は、\texttt{R}の基本的な記法を使います。
+\begin{itembox}[l]{特定の列の抽出}
+\begin{verbatim}
+# オブジェクト$列名という記法
+treedf$DBH
+   [1] 35.469068 40.142572 42.157646 41.888702 39.498515 25.045804 43.678378
+   [8] 45.171440 35.156645 46.748556 32.375514 43.860738 33.359967 22.756558
+（以下、省略）
+\end{verbatim}
+\end{itembox}
+
+\begin{itembox}[l]{不要な列を指定}
+\begin{verbatim}
+# Region、Stand、Species列を残すために
+# DBHとDebark列を不要とする
+treedf %>%
+  select(-c("DBH", "Debark"))
+# 数字でも同じことができる
+treedf %>%
+  select(-c(3,5))
+\end{verbatim}
+\end{itembox}
+
+\begin{itembox}[l]{必要な行を指定}
+\begin{verbatim}
+# DBHが30より大きいデータだけを指定
+treedf %>%
+  filter(DBH > 30)
+# SpeciesがGenus_speciesAだけを指定
+treedf %>%
+  filter(Species=="Genus_speciesA")
+# 複数条件も指定可能
+treedf %>%
+  filter(Debark==1&Species=="Genus_speciesG")
+# 文字列の複数条件を指定する場合はstr_detect関数を使うと便利
+treedf %>%
+  filter(str_detect(Species, "B|F")) # 部分一致
+\end{verbatim}
+\end{itembox}
+
+\begin{itembox}[l]{不要な行を指定}
+\begin{verbatim}
+# SpeciesがGenus_speciesC以外のデータを得る
+treedf %>%
+  filter(Species!="Genus_speciesC")
+# 複数条件ももちろん可能
+# SpeciesがBおよびFを除く
+treedf %>%
+  filter(!str_detect(Species, "B|F"))
+\end{verbatim}
+\end{itembox}
+
+このように部分的な選択や削除を行う際、データの種類や型を意識する必要があります。また、条件を指定するための二項演算子も知っておく必要があります。以下にまとめます。
+
+	\subsubsection{\texttt{R}におけるデータの種類}
+\noindent \textgt{単一の値の種類}
+\begin{table}[htb]
+ \begin{center}
+  \begin{tabular}{llll} \toprule
+名称 & Rでの表記 & 変更方法 & 例 \\ \midrule
+空値 & \verb|NA| &  & NA \\
+論理値 & \verb|logical| & as.logical() & TRUE \\
+整数 & \verb|numeric| & as.numeric() & 5.3 \\
+文字列 & \verb|character| & as.character() & \verb|"Tekito"| \\
+要因 & \verb|factor| & as.factor() & \\ \bottomrule
+  \end{tabular}
+ \end{center}
+\end{table}
+
+\verb|NA|はしばしば他の関数を無効化してしまうので注意が必要です。
+また、要因は外見は文字列とほぼ同じですが、要因は明確なカテゴリーとして扱
+われます。外見が数字でも文字列として扱われているケースがあるので注意が必
+要です。
+
+\noindent \textgt{値の集まりの構造}
+\begin{table}[htb]
+ \begin{center}
+  \begin{tabular}{lll} \toprule
+名称 & Rでの表記 & 変更方法 \\ \midrule
+ベクトル & \verb|c| & c() \\
+行列 & \verb|matrix| & \index{matrix@\texttt{matrix()}}\verb|matrix()|
+または\index{as.matrix@\texttt{as.matrix()}}\verb|as.matrix()| \\
+データフレーム & \verb|data.frame| & \index{data.frame@\texttt{data.frame()}}\verb|data.frame()|または\index{as.data.frame@\texttt{as.data.frame()}}\verb|as.data.frame()| \\
+ティブル & \verb|tibble| & \index{tibble@\texttt{tibble()}}\verb|tibble()|または\index{as_tibble@\texttt{as\_tibble()}}\verb|as_tibble()| \\
+リスト & \verb|list| & \index{list@\texttt{list()}}\verb|list()|または
+\index{as.list@\texttt{as.list()}}\verb|as.list()| \\ \bottomrule
+  \end{tabular}
+ \end{center}
+\end{table}
+\begin{description}
+ \item[ベクトル]\index{べくとる@ベクトル}最も基本の単位。一つながりのデー
+            タ。あらゆるデータを含めるが、\textbf{同一ベクトル\index{べ
+            くとる@ベクトル}内で異なった形式の値を混在させることはできな
+            い}。異なった形式の値を混在させると、一番可塑性が高い形式に変換
+            されてしまう。例えば、
+\begin{verbatim}
+test <- 1:4
+test[1] + test[2] #testの1番目と2番目の要素を足しなさい
+[1] 3
+test2 <- c(1, 2, "Tekito", TRUE)
+test2
+[1] "1"      "2"      "Tekito" "TRUE"  
+test2[1] + test2[2] #test2の1番目と2番目の要素を足しなさい
+Error in test2[1] + test2[2] : non-numeric argument to binary operator
+\end{verbatim}
+となり、文字列が入っている場合は数字も文字列扱いになってしまう。
+ \item[行列]\index{ぎょうれつ@行列}ベクトル\index{べくとる@ベクトル}がい
+            くつも集まったもの。\verb|numeric|以外は含めない。
+ \item[データフレーム]\index{でーたふれーむ@データフレーム}
+            ベクトル\index{べくとる@ベクトル}の集
+            まり。\texttt{R}にデータを読ませるときによく使われる形式だが、最近tibbleへの移行が進んでいる。行や列のラベルあるいは番号で行や列を取り出せる。
+            行数の違う列が混在することはできない。行列でいろんなデータを
+            扱えるようにしたもの、と考えられる。
+ \item[ティブル]\index{てぃぶる@ティブル}
+            上記のように、データフレームとほぼ同じだが、最近はティブルが使われることが多い。標準ではデータの先頭だけを表示させる、groupが扱えるなどの特徴がある。
+ \item[リスト]\index{りすと@リスト}行数の違うデータだろうがなんだろうが
+            無理やり1つのオブジェクトにしてしまう。データの長さや形
+            式がごちゃごちゃなものをとりあえず一つのオブジェクト
+            \index{おぶじぇくと@オブジェクト}にまとめ
+            たいときに有用。
+\end{description}
+とりあえずExcelなどに打ち込んだデータはデータフレームまたはティブルとして扱うことがほとんどで、これが基本形です。
+
+    \subsubsection{二項演算子}
+\begin{table}[htb]
+ \begin{center}
+  \begin{tabular}{ll} \toprule
+意味 & Rでの表記  \\ \midrule
+等しい & \verb|==|  \\
+等しくない & \verb|!=| \\
+aより大きい & \verb|> a| \\
+a以上 & \verb|>= a| \\
+a未満 & \verb|< a| \\
+a以下 & \verb|<= a| \\
+aまたはb & \verb~a | b ~ \\
+aかつb & \verb|a & b| \\ \bottomrule
+  \end{tabular}
+ \end{center}
+\end{table}
+
+  \subsection{演算関数}
+\texttt{R}では、演算のための関数がいくつか紹介されています。
+\begin{description}
+  \item[mean]\index{mean@\texttt{mean()}}平均値を計算する。例：\verb|mean(treedf$DBH)|
+  \item[sd]\index{sd@\texttt{sd()}}標準偏差を計算する
+  \item[sum]\index{sum@\texttt{sum()}}合計値を計算する。
+  \item[max]\index{max@\texttt{max()}}最大値を計算する。
+  \item[min]\index{min@\texttt{min()}}最小値を計算する。
+  \item[length]\index{length@\texttt{length()}}要素数（データの数）を計算する。例：\verb|length(treedf$DBH)|
+  \item[unique]\index{unique@\texttt{unique()}}データ中の固有の要素を表示する。例：\verb|unique(treedf$Species)|
+  \item[summary]\index{summary@\texttt{summary()}}ティブルやデータフレームに適用し、列毎の要約統計量を計算する。例：\verb|summary(treedf)|
+\end{description}
+
+  \subsection{列の追加}
+これは非常によく使います。すでに説明したように、ティブルに新しい列を追加するときには\index{mutate@\texttt{mutate()}}\verb|mutate|を使います。以下では、DBHから周囲長を計算して、新しい列として加えます。
+\begin{itembox}[l]{新しい列の追加}
+\begin{verbatim}
+treedf <- treedf %>%
+  mutate(GBH=DBH*pi)
+\end{verbatim}
+\end{itembox}
+
+なお、\texttt{R}の基本関数による列の追加は、\verb|treedf$GBH <- treedf$DBH*pi|のように、\verb|オブジェクト$列名 <- |という形で実行できます。
+
+では、DBHから断面積を計算してみましょう。断面積は、DBHの半分（半径）を2乗し、円周率を乗じることで計算できます。以下の空白部分を埋めてみましょう。
+\begin{exercise}{断面積を計算して新しい列として付与する}{mutate3}
+\begin{verbatim}
+treedf <- treedf %>%
+  ____(断面積=(_____/2)^{2}*pi)
+\end{verbatim}
+\end{exercise}
+
+  \subsection{カテゴリーごとの操作}
+データに含まれる何かしらのカテゴリー毎にデータを操作する場合、すでに紹介した\index{groupby@\texttt{group\_by()}}\verb|group_by|関数を使います。カテゴリー毎に擬似的にデータを分割し、\verb|reframe|関数または\verb|mutate|関数で処理を行います。これも非常に多用します。
+
+処理を行う関数ですが、\verb|group_by|で指定する単位でデータを集約する（元のデータと形が変わる）場合は\index{reframe@\texttt{reframe()}}\verb|reframe|、\verb|group_by|単位で何かしらの処理を行うがそれを元々のデータに付与する（元のデータと形は変わらず、列が追加されるだけ）場合は\verb|mutate|を使います。と、言葉で書いても分かりにくいと思うので、実例を通して学びます。まず、\verb|reframe|を使う場合です。種ごとの剥皮率を計算します。
+\begin{itembox}[l]{種毎の剥皮率の計算}
+\begin{verbatim}
+treedf %>%
+  group_by(Species) %>%
+  reframe(剥皮率=mean(Debark))
+\end{verbatim}
+\end{itembox}
+
+今回は結果を表示させるだけですが、もしこの計算結果を保存したければ、上記のコードの先頭に\verb|保存するオブジェクトの名前 <- treedf ....|と記述することで保存できます。
+
+使い方に慣れるために、似たような例題をやってみましょう。以下の空白を埋めて下さい。
+\begin{exercise}{種ごとの平均DBHを計算する}{reframe2}
+\begin{verbatim}
+treedf %>%
+  group_by(Species) %>%
+  ____(平均DBH=____(DBH))
+\end{verbatim}
+\end{exercise}
+
+次は、\verb|mutate|を使う場合です。毎木プロットごとに、プロットの断面積合計に対する各個体の断面積の相対的な優占度を計算してみましょう。
+\begin{itembox}[l]{プロットごとの各個体の相対優占度}
+\begin{verbatim}
+treedf %>%
+  group_by(Region, Stand) %>%
+  mutate(Relative_dominance=断面積/sum(断面積)) %>%
+  # 以下は、単に表示のためで、本来は不要
+  select(断面積, Relative_dominance)
+\end{verbatim}
+\end{itembox}
+
+結果を見ていただくとわかるように、\verb|mutate|を用いた場合は元のデータに\verb|mutate|内で計算した結果が付与されています。ただし、上記の例では\verb|sum(Area)|によってRegionかつStandの合計が計算されており、\verb|group_by|が作用していることがわかります。
+
+このような\verb|group_by|関数の性質を利用することで、例えば「プロット内で自分よりDBHが大きい個体のDBHの合計を計算する」ということも可能です。
+\begin{itembox}[l]{自分より大きい個体のDBHを合計する}
+\begin{verbatim}
+treedf2 <- treedf %>%
+  group_by(Region, Stand) %>%
+  mutate(Supression_index=map_dbl(DBH, ~sum(DBH[DBH>.]))) %>%
+  # 以下は、単に表示のためで、本来は不要
+  select(断面積, Supression_index)
+\end{verbatim}
+\end{itembox}
+\index{mapdbl@\texttt{map\_dbl()}}\verb|map_dbl|は行ごとに何かしらの関数を適用し、その結果を数字のベクタとして返す関数です。一般に、\verb|~|以下で書かれた部分が関数とみなされます。また、関数中で\verb|.|は自分、つまり与えるデータを示す記号です。
+
+  \subsection{文字列操作}
+データとして含まれている文字列を、データ処理や作図の過程で変更したいことが生じると思います。ここでは、文字列の操作法について説明します。
+    \subsubsection{文字列の結合}
+以下では、RegionとStandを結合してPlotidという新しい文字列を作ります。\index{strc@\texttt{str\_c()}}\verb|str_c|関数を使います。
+\begin{itembox}[l]{文字列の結合}
+\begin{verbatim}
+Plotid <- str_c(treedf$Region, treedf$Stand)
+# 結合する文字列の間に、任意の文字列を挿入することも可能
+Plotid2 <- str_c(treedf$Region, treedf$Stand, sep="_")
+\end{verbatim}
+\end{itembox}
+
+では、使い方に慣れるために、RegionとStandを、\verb|_|で結合したPlotidという列を、treedfオブジェクトに新しい列として付与する以下の演習を行なってください。
+\begin{exercise}{RegionとStandの結合}{strc1}
+\begin{verbatim}
+treedf %>%
+  ____(Plotid=____(Region, Stand, sep="_"))
+\end{verbatim}
+\end{exercise}
+
+    \subsubsection{文字列の置換}
+今回のデータで種名は\verb|Genus_species*|という表記にしてあります。ですが、論文の表などで記載する場合、\verb|_|は不要でしょう。図の場合は、最後の一文字だけがあれば十分かも知れません。
+
+このように、特定のパタンの文字列を探して置換する関数として、\index{strreplace@\texttt{str\_replace()}}\verb|str_replace|があります。
+\begin{itembox}[l]{文字列の置換}
+\begin{verbatim}
+treedf %>%
+  mutate(Sp2=str_replace(Species, "_", " "))
+# A tibble: 1,122 × 6
+   Region Stand   DBH Species        Debark Sp2           
+   <chr>  <chr> <dbl> <chr>           <dbl> <chr>         
+ 1 A      ST1    35.5 Genus_speciesM      0 Genus speciesM
+ 2 A      ST1    40.1 Genus_speciesO      0 Genus speciesO
+ （以下、省略）
+\end{verbatim}
+\end{itembox}
+\verb|str_replace(検索する列, 検索する文字列, 置換する文字列)|という書き方をします。では、\verb|str_replace|に慣れるために、以下の演習を行なってください。先ほどはSpecies列の各データから\verb|_|を除きました。今度は、\verb|Genus_species|部分を除き、Sp2という新しい列としてtreedfオブジェクトに付与してください。
+
+\begin{exercise}{文字列の置換}{strreplace1}
+\begin{verbatim}
+treedf %>%
+  ____(Sp2=str_replace(Species, "_________", "")) %>%
+  # 以下は、単に表示のためで、本来は不要
+  select(Species, Sp2)
+\end{verbatim}
+\end{exercise}
+
+これまでは、固定された文字列を置換しました。もう少し柔軟な文字列の抽出も可能です。以下では、正規表現を使って、「先頭から\verb|_|以外の部分」を抽出します。
+\begin{itembox}[l]{曖昧な条件指定による抽出}
+\begin{verbatim}
+treedf %>%
+  mutate(Sp2=str_extract(Species, "^[^_]+")) %>%
+  # 以下は、単に表示のためで、本来は不要
+  select(Species, Sp2)
+\end{verbatim}
+\end{itembox}
+
+    \subsubsection{正規表現}
+効率よく検索や抽出を行うためには、\index{せいきひょうげん@正規表現}正規表現を使いこなす必要があります。正規表現とは、完全一致とは異なり「〜のような条件に従う」という、より曖昧な表現です。
+
+正規表現を学ぶために、\verb|char1 <- "山梨森林管理事務所, やまなししんりんかんりじむしょ, yamanashi, 1530_は-01"|という素敵な文字列から必要な部分を抽出してみましょう。
+\begin{itembox}[l]{文字の抽出}
+\begin{verbatim}
+str_extract(char1, "\\w")
+[1] "山"
+\end{verbatim}
+\end{itembox}
+
+文字列の抽出においては、必ず「左から見て最初にマッチした部分」が結果として返されるという原則があることに注意して下さい。\verb|\\w|は、特殊記号でない文字を意味します。そのため、一番最初の文字である「山」が抽出されました。
+
+では次に、文字が続いている部分を抽出してみましょう。
+\begin{itembox}[l]{一連の文字の抽出}
+\begin{verbatim}
+str_extract(char1, "\\w+")
+[1] "山梨森林管理事務所"
+\end{verbatim}
+\end{itembox}
+
+先ほどと異なるのは、末尾に\verb|+|が付いただけです。これは、一つ以上の要素が続くことを意味します。このため、文字が続いている範囲全てがマッチするので「山梨森林管理事務所」という文字列を抽出することができました。\verb|,|は特殊文字なので、結果に含まれていません。
+
+上記では種類を問わず文字を検索しましたが、特定の種類の文字を検索することも可能です。以下では、ひらがなを抽出してみましょう。
+\begin{itembox}[l]{一連の文字の抽出}
+\begin{verbatim}
+str_extract(char1, "\\p{Script=Hiragana}")
+[1] "や"
+\end{verbatim}
+\end{itembox}
+\verb|\\p{Script=Hiragana}|は、ひらがなを意味します。では、一連のひらがなを抽出してみましょう。
+
+\begin{exercise}{一連のひらがなの抽出}{strextract1}
+\begin{verbatim}
+str_extract(char1, "\\p{Script=Hiragana}__")
+\end{verbatim}
+\end{exercise}
+
+では、もう少し高度な抽出を行ってみましょう。上記の文字列は、森林の小班を表しています（値は架空のものです）。この文字列から、例えば林班の番号だけ、小班の名前だけ、小班の枝番だけを抽出したいことがあると思います。しかし、上記の文字列では、区切り文字に一貫性がなく、左から見て一番最初にマッチするという単純な検索では抽出が難しいです。
+
+区切り文字を認識させれば良さそうですが、ここで問題となるのが、「区切り文字は検索する目印としては使いたいが、抽出結果には含めたくない」ということがあります。これを可能にする正規表現があります。以下では例として、「\verb|_|の前の数字」を検索します。
+
+\begin{itembox}[l]{肯定の先読み}
+\begin{verbatim}
+str_extract(char1, "\\d{1,9}(?=\\_)")
+[1] "1530"
+\end{verbatim}
+\end{itembox}
+\verb|(?= )|は、「肯定の先読み」と呼ばれる正規表現です。この表現が書かれる直前から見て後ろ（右側）に、\verb|=|以下に書かれた文字列についてその文字列があることを認識するがその文字列は結果に含めないという処理を行えます。上記の文字列では\verb|_|は「1530\verb|_|」の箇所でしか出てきません。このため、\verb|_|の直前に指定した\verb|\\d{1,9}|（1〜9桁の数字）の直後にある\verb|_|を認識するが、結果には含まれていません。
+
+今度は、後ろに続く文字列の直前に任意の文字列があるかを確認する、「肯定の後読み」を行ってみます。
+\begin{itembox}[l]{肯定の後読み}
+\begin{verbatim}
+str_extract(char1, "(?<=\\_)\\p{Script=Hiragana}")
+[1] "は"
+\end{verbatim}
+\end{itembox}
+
+上記の例で見た通り、正規表現は何かしらの条件を記号で指定します。すべての正規表現をここで紹介することはできませんが、いくつか代表的な表現を紹介します。正規表現は最初はとっつきにくいかもしれませんが、使いこなせると文字列を非常に柔軟に取り出すことが可能になります。
+
+\begin{description}
+  \item[{\texttt{\textbackslash \textbackslash w}}]（特殊文字以外の）文字
+  \item[\texttt{[a-zA-Z]}]半角アルファベット文字
+  \item[\texttt{\textbackslash \textbackslash d}]数字
+  \item[\texttt{\textbackslash \textbackslash d\{1,4\}}]1桁から4桁までの数字
+  \item[\texttt{\textbackslash \textbackslash p\{Script=Han\}}]漢字
+  \item[\texttt{\textbackslash \textbackslash p\{Script=Hiragana\}}]ひらがな
+  \item[\texttt{\textbackslash \textbackslash p\{Script=Katakana\}}]カタカナ
+  \item[{\texttt{\textbackslash \textbackslash s}}]半角スペース
+  \item[\texttt{\textbackslash \textbackslash b}]文字列の区切り部分（半角スペースまたは\verb|_|）
+  \item[\texttt{\^}]（文字列を左から見た時の）先頭
+  \item[\texttt{\textbackslash}]エスケープ記号（特殊文字を検索する時に、この記号と組み合わせて表記すると検索可能になる）
+  \item[{\texttt{[\string^\ldots]}}]\ldots 以外の要素
+  \item[\texttt{+}]直前の要素が1つ以上続く
+  \item[\texttt{(?=\ldots)}] 特定のパターンの後ろに\ldots の条件が存在することを確認するが、その条件はマッチング結果に含めない（肯定の先読み）。
+  \item[\texttt{(?<=\ldots)}] 特定のパターンの前に\ldots の条件が存在することを確認するが、その条件はマッチング結果に含めない（肯定の後読み）。
+
+\end{description}
+
+    \subsubsection{大文字と小文字の変換}
+\index{strtoupper@\texttt{str\_to\_upper()}}\index{strtolower@\texttt{str\_to\_lower()}}\index{strtotitle@\texttt{str\_to\_title()}}\texttt{R}は大文字と小文字を区別します。これは有用な時もありますが、人間側があまり意識せず大文字と小文字を混在させてしまい、データを結合するときなどに混乱が生じることがあります。そんなときは、以下で紹介するように\texttt{R}上で大文字や小文字に変換することができます。
+
+\begin{itembox}[l]{全て大文字にする}
+\begin{verbatim}
+treedf %>%
+  mutate(Sp4=str_to_upper(Species)) %>%
+  # 以下は、単に表示のためで、本来は不要
+  select(Species, Sp4)
+\end{verbatim}
+\end{itembox}
+
+\begin{itembox}[l]{全て小文字にする}
+\begin{verbatim}
+treedf %>%
+  mutate(Sp4=str_to_lower(Species))
+\end{verbatim}
+\end{itembox}
+
+\begin{itembox}[l]{先頭だけ大文字にする}
+\begin{verbatim}
+treedf %>%
+  mutate(Sp4=str_to_title(Species))
+\end{verbatim}
+\end{itembox}
+    \subsubsection{日本語の扱い}
+昔から\texttt{R}を使っている人は、\texttt{R}ではデータに日本語が含まれるとうまく扱えないというイメージを持っているかもしれません。しかし、\verb|read_excel|関数でExcelファイルを直接読めるようになり、文字化けの問題はかなり解消しました。また、日本語を扱える関数も充実してきました。そのため現在では、\texttt{R}で日本語が含まれるファイルを積極的に編集することが可能です。
+
+以下では、全角と半角文字の変換、日本語文字のローマ字化について説明します。自分でデータを打ち込む場合に両者が混在することはないと思いますが、行政データの婆は全角と半角で作成していることがあり、くらくらした経験がある方もいるのではないでしょうか？なお、以下で扱う関数は\index{stringi@stringiパッケージ}\verb|stringi|パッケージに含まれていますので、最初にパッケージを読み込みます。
+
+\begin{itembox}[l]{半角から全角}
+\begin{verbatim}
+J_text <- c("ニホンジカ", "ﾆﾎﾝｼﾞｶ", "ハウチワカエデ", "ﾊｳﾁﾜｶｴﾃﾞ")
+library(stringi)
+stri_trans_general(J_text, "Halfwidth-Fullwidth")
+\end{verbatim}
+\end{itembox}
+\index{stritransgeneral@\texttt{str\_trans\_general()}}\verb|stri_trans_general|関数を使い、引数に\verb|Halfwidth-Fullwidth|を指定することで、半角文字を全角文字に変換できます。これで原理はおおよそわかったと思いますので、全角から半角文字への変換は演習問題にしたいと思います。
+
+\begin{exercise}{全角から半角}{stritransgeneral1}
+\begin{verbatim}
+stri_trans_general(J_text, "____width-____width")
+\end{verbatim}
+\end{exercise}
+
+このように日本語も使えますが、関数によってどうしても英数字しか扱えない状況もあると思います。そのような場合、日本語を半角のアルファベット（いわゆるローマ字）に変換することも可能です。
+\begin{itembox}[l]{日本語をローマ字にする}
+\begin{verbatim}
+stri_trans_general(J_text, "Latin")
+\end{verbatim}
+\end{itembox}
+
+    \subsubsection{条件分岐}
+与えられた文字列について、〜なら〜に変換するといった操作も可能です。例えば、DBHが50より大きい個体を林冠を構成する個体という意味でCanopy、それ以下のサイズの個体をその他（Other）と分類してみます。\index{ifelse@\texttt{if\_else()}}\verb|if_else|関数を使います。
+\begin{itembox}[l]{1条件の条件分岐}
+\begin{verbatim}
+treedf %>%
+  mutate(Layer=if_else(DBH>50, "Canopy", "Others")) %>%
+  print(., n=100)
+# if_else(条件式, TRUEの場合, FALSEの場合)
+\end{verbatim}
+\end{itembox}
+
+条件分岐については、条件が2つ以上でも可能です。ここでは、なぜかニホンジカによる植物の嗜好性がわかっているとして、「嗜好性種」、「普通種」、「不嗜好性種」に再区分した列を追加します。\index{casewhen@\texttt{case\_when()}}\verb|case_when|関数を使います。
+\begin{itembox}[l]{2条件以上の条件分岐}
+\begin{verbatim}
+treedf %>%
+  mutate(Sptype=case_when(Species=="Genus_speciesA" ~ "Palatable",
+    Species=="Genus_speciesB" ~ "Unpalatable",
+    .default="Normal")) %>%
+  print(, n=100)
+# case_when(条件式1 ~ 条件にマッチした場合,
+  条件式2 ~ 条件にマッチした場合,
+  .default ~ 条件式を設定しない場合
+  ....)
+\end{verbatim}
+\end{itembox}
+一般に文字列を条件分岐させる場合、指定する条件が多くなりがちです。\verb|case_when|関数ではそのような状況も想定し、\verb|.default|という表現があります。上記の例のように、個別に指定しない場合は全て\verb|.default|で指定した結果が返されます。
+
+    \subsubsection{NA（欠損値）の扱い方}
+\label{na_treatment}
+空欄（欠損値）のことを、\texttt{R}では\textbf{NA}と
+表記します。こいつが少々曲者です。NA\index{NA@\texttt{NA}}を含むティブルやベクトル
+に上記の関数を適用しても、
+\textbf{ほとんどはNAが返ってきます}（つまり実行で
+きない！）。しかし、欠測値が生じることは、実データでは避けられません。そのため、NAの扱い方を知ることは重要です。
+
+NAを含むデータを作って、挙動を見てみましょう。最初の方で、プロットかつ種単位の出現個体数の行節を生成した際、\verb|pivot_wider|の引数で存在しない組み合わせの箇所を0で埋める\verb|fill=0|を指定しましたが、それを指定しなければNAを含んだデータができます。
+\begin{verbatim}
+treedfNA <- treedf %>%
+  group_by(Region, Stand, Species) %>%
+  reframe(個体数=n()) %>%
+  pivot_wider(., id_cols="Species", names_from=c("Region", "Stand"),
+    values_from="個体数")
+summary(treedfNA)
+# NAデータが含まれている
+   Species              A_ST1           A_ST2     
+ Length:20          Min.   :1.000   Min.   :1.00  
+ Class :character   1st Qu.:1.000   1st Qu.:1.00  
+ Mode  :character   Median :2.000   Median :1.50  
+                    Mean   :2.176   Mean   :1.75  
+                    3rd Qu.:3.000   3rd Qu.:2.00  
+                    Max.   :4.000   Max.   :4.00  
+                    NA's   :3       NA's   :4     
+（以下、省略）
+mean(treedfNA$A_ST1)
+[1] NA
+\end{verbatim}
+このように、NAが返ってきてしまいます。NAへの対処法としては、以下の方法があります。
+\begin{itemize}
+	\item 関数の引数で対応
+	\item NAをデータから除く
+	\item NAを0に変換する（問題ない場合は）
+\end{itemize}
+
+関数によっては、引数でNAを除いて動作してくれる関数があります。先ほどの\verb|mean()|も実はそうです。
+\begin{verbatim}
+mean(treedfNA$A_ST1, na.rm=TRUE)
+[1] 2.176471
+\end{verbatim}
+ただし、関数によってこのような引数が使える場合と使えない場合がありますので、ご自身で使いたい関数の動作を調べてください。
+
+NAは関数の動作を妨げるだけでなく、二項演算子などの動作も妨げます。NAを指定して除くためには、NAかどうかを判定する専門の関数\index{is.na@\texttt{is.na()}}\verb|is.na()|を使う必要があります。先ほど生成したNAを含むデータは多くの列にNAが含まれていますが、仮に\verb|A_ST1|列についてNAがない部分に限定するコードを示します。
+\begin{verbatim}
+treedfNA2 <- treedfNA %>%
+  filter(!is.na(A_ST1))
+summary(treedfNA2)
+   Species              A_ST1           A_ST2      
+ Length:17          Min.   :1.000   Min.   :1.000  
+ Class :character   1st Qu.:1.000   1st Qu.:1.000  
+ Mode  :character   Median :2.000   Median :2.000  
+                    Mean   :2.176   Mean   :1.857  
+                    3rd Qu.:3.000   3rd Qu.:2.000  
+                    Max.   :4.000   Max.   :4.000  
+                                    NA's   :3 
+（A_ST1列にはNAが含まれていない）
+ \end{verbatim}
+
+欠測であることが0と等価と考えて差し支えない場合（例えば、今回は生存しているかどうかに欠測があるが、これは発見できなかった場合は死亡0と考えて差し支えない）は、0に変換するのも手です。
+\begin{verbatim}
+treedfNA3 <- treedfNA %>%
+  mutate(A_ST1=if_else(is.na(A_ST1), 0, A_ST1))
+  # ifelse(条件式, TRUEの場合, FALSEの場合)
+summary(treedfNA3)
+   Species              A_ST1          A_ST2          B_ST1    
+ Length:20          Min.   :0.00   Min.   :1.00   Min.   :1.0  
+ Class :character   1st Qu.:1.00   1st Qu.:1.00   1st Qu.:1.5  
+ Mode  :character   Median :2.00   Median :1.50   Median :2.0  
+                    Mean   :1.85   Mean   :1.75   Mean   :2.4  
+                    3rd Qu.:2.25   3rd Qu.:2.00   3rd Qu.:3.0  
+                    Max.   :4.00   Max.   :4.00   Max.   :5.0  
+                                   NA's   :4      NA's   :5    
+（A_ST1からNAが消えている。かつ、treedfNA2と異なり
+NAを0にしているので、平均値などが異なっている点に注意）
+\end{verbatim}
+例で示したように、\verb|if_else()|関数は、最初に条件式を記述し、次に条件式がTRUEの場合、最後に条件式がFALSEの場合の動作を記述します。
+
+  \subsection{パイプライン処理の利点}
+ここまで、基本的にはtidyverseによるパイプライン処理でコードを記述してきました。これに対し、\texttt{R}の基本関数による記法も存在します。両者は対立するものではなく、どちらの記法も知っておく必要があります。ただし、一般にパイプライン処理の方が、コードの可読性が高いため、飯島は可能な限りパイプライン処理をすることをお勧めしています。
+
+両者の違いを明確にするため、同じ処理をそれぞれの記法で記述します。題材として、毎木データからRegionかつStandごとの胸高断面積合計を計算し、それを毎木データに付与するという作業を行います。
+\begin{itembox}[l]{パイプライン処理}
+\begin{verbatim}
+treedf1 <- treedf %>%
+  group_by(Region, Stand) %>%
+  mutate(plotBA=sum(3.14*(DBH/100/2)^2)/(20*20)*100*100)
+\end{verbatim}
+\end{itembox}
+
+同じ内容を、\texttt{R}の基本関数で書くとこうなります（基本関数の説明はしないので、これまでに説明していない関数を使っています）。
+\begin{itembox}[l]{基本関数}
+\begin{verbatim}
+plotBA <- as.data.frame(ftable(tapply(3.14*(treedf$DBH/100/2)^2/(20*20)*100*100,
+  treedf[, c("Region", "Stand")], sum)))
+colnames(plotBA) <- c("Region", "Stand", "plotBA")
+treedf2 <- merge(treedf, plotBA, by=c("Region", "Stand"))
+\end{verbatim}
+\end{itembox}
+
+行数としては同じ3行ですが、基本関数はデータの形を整えるために様々な関数を組み合わせる必要があります。また、1行1行ごとに異なる処理をしており、元々のデータとの関係が見えにくいです。
+
+  \subsection{繰り返し動作}
+繰り返し命令は、様々な場面で使える関数です。\texttt{R}で繰り返し命令は、\index{for@\texttt{for()}}\verb|for|関数を使います。
+	\subsubsection{\texttt{for()}の基本}
+\verb|for()|は、基本的に以下のように記述します。
+\begin{itembox}[l]{\texttt{for()}の使い方}
+\begin{verbatim}
+for (i in 1:N) {
+   i
+}
+\end{verbatim}
+\end{itembox}
+
+\verb|1:N|はすでに学んだように、等差数列（1、2、...、N）です。この数字が、\verb|i|という文字列に逐次代入されます。つまり、まず\verb|i|に1が代入され、括弧内で指定された動作が終了すると、次に\verb|i|に2が代入され、括弧内で指定された動作が行われます。そして、\verb|i|に代入する文字列がなくなるまでこの動作が続けられます。代入するのは数字である必要はなく、また代入位置を示す文字列が\verb|i|である必要もありません。
+
+    \subsubsection{多数のファイルの読み込み}
+\verb|for()|が力を発揮するのは、同じような動作を何度も繰り返すときです。今回用いるデータの一つに、自動撮影カメラのデータがあります。自動撮影カメラによる撮影枚数が多いほど、対象とする動物が多いと考えられます。ですが、自動撮影カメラのデータは、通常カメラのSDカードごとに管理されます。そのため、カメラが複数ある場合、データのファイルも複数あることが普通です。このように、同じような形式のデータファイルが多数ある場合に、それらをまとめて処理するのに便利なのが\verb|for|です。
+
+ですが、いくら繰り返し命令が使えるとしても、ファイル名を個別に指定することは煩雑です。もし自動撮影カメラのファイルが特定のフォルダに格納されていれば、そのフォルダ以下にあるファイル名を、ファイル名の特徴（例えば拡張子）でまとめて取得することができます。
+\begin{itembox}[l]{ファイル名による検索}
+\begin{verbatim}
+cam_files <- list.files("cameraフォルダまでのパス",
+  recursive=TRUE, pattern="*.xlsx")
+# 飯島の場合
+cam_files <- list.files(here("data", "camera"),
+  recursive=TRUE, pattern="*.xlsx")
+\end{verbatim}
+\end{itembox}
+
+本当にファイル名を取得できたのか、\verb|cam_files|と打ち込んで確認してみましょう。
+\begin{verbatim}
+cam_files
+  [1] "A_1.xlsx" "A_2.xlsx" "A_3.xlsx" "A_4.xlsx" "A_5.xlsx"
+  [6] "B_1.xlsx" "B_2.xlsx" "B_3.xlsx" "B_4.xlsx" "B_5.xlsx"
+（以下、省略）
+\end{verbatim}
+
+どうやら、ファイルは100個あるようです。これらを、繰り返し命令を使わないで読み込もうとすると、以下のようになります。
+\begin{verbatim}
+cam_df <- read_excel(here("data", "camera", cam_files[1]), sheet="Sheet 1")
+cam_df <- cam_df %>%
+  bind_rows(., read_excel(here("data", "camera", cam_files[2]), sheet="Sheet 1"))
+cam_df <- cam_df %>%
+  bind_rows(., read_excel(here("data", "camera", cam_files[3]), sheet="Sheet 1"))
+...
+cam_df <- cam_df %>%
+  bind_rows(., read_excel("data", "camera", cam_files[100]), sheet="Sheet 1"))
+\end{verbatim}
+上記の例では、\index{bindrows@\texttt{bind\_rows()}}\verb|bind_rows|という新しい関数が出てきました。これは、ティブル同士を縦方向で結合する関数です。似たような関数として\verb|rbind|がありますが、\verb|rbind|は結合するティブルの列名が完全に一致している必要があるのに対し、\verb|bind_rows|は一致していなくても構いません。
+
+上記のように、100行もコマンドを書くのは煩雑だと思います。そこで、\verb|for|の出番です。
+
+\begin{itembox}[l]{複数ファイルの読み込みと結合}
+\begin{verbatim}
+cam_df <- read_excel(here("data", "camera", cam_files[1]),
+  sheet="Sheet 1")
+for (i in 2:length(cam_files)) {
+  cam_df <- cam_df %>%
+    bind_rows(., read_excel(here("data", "camera", cam_files[i]),
+      sheet="Sheet 1"))
+}
+# 警告が出ますが、気にしなくて大丈夫です。
+\end{verbatim}
+\end{itembox}
+
+データが本当に全て結合できたのか、\verb|cam_df|および\verb|tail(cam_df)|と打ち込んで、データの最初と最後を見てみましょう。
+
+\begin{verbatim}
+cam_df
+# A tibble: 892,900 × 4
+   cam_id ymd                 count species
+   <chr>  <dttm>              <dbl> <chr>  
+ 1 A_1    2024-05-09 10:00:00     0 <NA>   
+ 2 A_1    2024-05-09 10:05:00     0 <NA>   
+（途中省略）
+\end{verbatim}
+
+ご覧いただければわかるように、自動撮影カメラデータは以下のような構造となっています。
+\begin{description}
+  \item[\texttt{cam\_id}]カメラのID
+  \item[\texttt{ymd}]撮影日時
+  \item[\texttt{count}]撮影個体数
+  \item[\texttt{species}]撮影された種
+\end{description}
+
+  \subsection{ティブル同士の結合}
+    \subsubsection{縦または横方向で結合}
+これは先ほどの繰り返し命令のところで出てきたように、\verb|bind_rows|や\verb|bind_cols|を使います。
+
+    \subsubsection{2つのデータに共通のデータを目印に結合}
+複数のデータを結合する場合、両者に共通な情報をもとに結合することも可能です。そのための関数として、\verb|**_join|という一連の関数が用意されています。これも多用します。
+
+例えば、すでに読み込んでいる毎木データは測定した1本1本の木が基本単位です。一方、RegionやStand単位で得られる情報もあると思います。以下では、データとして持っているRegionの情報を毎木データと結合することで、\verb|**_join|関数の使い方を学びます。まず、Region単位のデータを読み込みます。
+
+\begin{verbatim}
+regioninfo <- read_excel(here("data", "data.xlsx"), sheet="Region")
+regioninfo
+# A tibble: 20 × 2
+   Region 地域    
+   <chr>  <chr>   
+ 1 A      白州    
+ 2 B      八ヶ岳  
+ （以下、省略）
+\end{verbatim}
+
+どうやら、Regionの日本語地名が入っているようです。では、これを毎木データと結合します。
+
+\begin{itembox}[l]{2つの異なるデータを共通の列を目印に結合する}
+\begin{verbatim}
+treedf <- treedf %>%
+  inner_join(., regioninfo, by=c("Region"))
+treedf
+# A tibble: 1,122 × 8
+   Region Stand   DBH Species        Debark   GBH 断面積 地域 
+   <chr>  <chr> <dbl> <chr>           <dbl> <dbl>  <dbl> <chr>
+ 1 A      ST1    35.5 Genus_speciesM      0 111.    988. 白州 
+ 2 A      ST1    40.1 Genus_speciesO      0 126.   1266. 白州 
+（以下、省略）
+\end{verbatim}
+\end{itembox}
+
+ご覧いただければわかるように、確かに「地域」という列が追加できているようです。
+
+ここでは、結合する2つのデータに共通する部分のみ結合しました。\verb|****_join|関数はいくつか種類があり、以下のような結合も可能です。
+\begin{itemize}
+  \item \index{innerjoin@\texttt{inner\_join()}}\verb|inner_join(データ1, データ2, by=両者に共通する列)|　結合する2つのデータが一致する箇所のみ結合する
+  \item \index{leftjoin@\texttt{left\_join()}}\verb|left_join(データ1, データ2, by=両者に共通する列)|　データ1（左側）のデータは全て残す形で2つのデータを結合する
+  \item \index{rightjoin@\texttt{right\_join()}}\verb|right_join(データ1, データ2, by=両者に共通する列)|　データ2（右側）のデータは全て残す形で2つのデータを結合する
+  \item \index{fulljoin@\texttt{full\_join()}}\verb|full_join(データ1, データ2, by=両者に共通する列)|　結合する2つのデータの全てを保持しながら結合する
+\end{itemize}
+
+\verb|inner_join|に慣れるため、今度はStand単位の位置情報データを読み込み、結合させましょう。Stand単位のデータは、以下のようにしてあらかじめ読み込んでおきます。ただし、Standの番号はRegion間で重複しているので、RegionかつStand単位での結合が必要な点に注意が必要です。
+\begin{verbatim}
+standinfo <- read_excel(here("data", "data.xlsx"), sheet="Stand")
+standinfo
+# A tibble: 40 × 4
+   Region Stand   Lon   Lat
+   <chr>  <chr> <dbl> <dbl>
+ 1 A      ST1    138.  35.8
+ 2 A      ST2    138.  35.9
+ （以下、省略）
+\end{verbatim}
+
+\begin{exercise}{Standをキーにしてデータを結合する}{innerjoin1}
+\begin{verbatim}
+treedf <- treedf %>%
+  inner_join(., ____, by=c("____", "____"))
+\end{verbatim}
+\end{exercise}
+
+正しく結合できれば、以下のように表示されるはずです。少し分かりにくいですが、ちゃんと緯度経度が付与されています。
+\begin{verbatim}
+treedf
+# A tibble: 1,122 × 10
+   Region Stand   DBH Species        Debark   GBH 断面積 地域    Lon   Lat
+   <chr>  <chr> <dbl> <chr>           <dbl> <dbl>  <dbl> <chr> <dbl> <dbl>
+ 1 A      ST1    35.5 Genus_speciesM      0 111.    988. 白州   138.  35.8
+ 2 A      ST1    40.1 Genus_speciesO      0 126.   1266. 白州   138.  35.8
+ （以下、省略）
+ \end{verbatim}
+
+次に、より応用的な事例に取り組みます。この直前に読み込んだ自動撮影カメラのデータ（オブジェクト名\verb|cam_df|）をRegion単位に集計し、毎木データに付与します。しかし、カメラデータにはカメラのIDは入っていますが、Regionという列がありません。そのため、まずカメラデータに、Regionという列を追加します。
+\begin{verbatim}
+cam_df <- cam_df %>%
+  mutate(Region=str_extract(cam_id, "^[^_]+"))
+\end{verbatim}
+
+カメラデータにRegion列を追加することができました。では、Regionごとに撮影されていたニホンジカの枚数を合計しましょう。手順としては、speciesをニホンジカ（deer）に限定し、Regionごとに撮影枚数（count）を合計します。
+
+\begin{exercise}{ニホンジカの撮影枚数をRegion単位で集約する}{reframe3}
+\begin{verbatim}
+deerphoto <- cam_df %>%
+  filter(str_detect(species, "____")) %>%
+  group_by(Region) %>%
+  _______(Deer=sum(_____))
+\end{verbatim}
+\end{exercise}
+
+では、シカ密度データと毎木データを結合します。
+\begin{exercise}{一致データのみを結合}{innerjoin2}
+\begin{verbatim}
+treedf <- treedf %>%
+  inner_join(., deerphoto, by="_____")
+\end{verbatim}
+\end{exercise}
+
+正しく実行できていれば、以下のように表示されるはずです。
+\begin{verbatim}
+treedf
+# A tibble: 1,122 × 11
+   Region Stand   DBH Species        Debark   GBH 断面積 地域    Lon   Lat  Deer
+   <chr>  <chr> <dbl> <chr>           <dbl> <dbl>  <dbl> <chr> <dbl> <dbl> <dbl>
+ 1 A      ST1    35.5 Genus_speciesM      0 111.    988. 白州   138.  35.8    98
+ 2 A      ST1    40.1 Genus_speciesO      0 126.   1266. 白州   138.  35.8    98
+ （以下、省略）
+\end{verbatim}
+
+  \subsection{複数列に対する一括処理}
+ティブルの、複数の列に同じ関数などを適用したい状況があると思います。ここでは、複数の列に対し「NAを0に置換する」という処理を適用します。この例を実行するために、以前も作成したNAを含むデータを、以下の通り作成します。
+\begin{verbatim}
+treedfNA <- treedf %>%
+  group_by(Region, Stand, Species) %>%
+  reframe(個体数=n()) %>%
+  pivot_wider(., id_cols="Species", names_from=c("Region", "Stand"),
+    values_from="個体数")
+\end{verbatim}
+
+では、このデータの複数の列に対し、一括で「NAを0に置換する」という処理を行ってみます。
+
+\begin{itembox}[l]{複数の列に対する一括処理}
+\begin{verbatim}
+treedfNA1 <- treedfNA %>%
+  mutate(across(contains("_"), ~if_else(is.na(.), 0, .)))
+\end{verbatim}
+\end{itembox}
+
+既存の列に対して処理をする場合、mutate関数で加える形をとります。\index{across@\texttt{across()}}acrossは引数で指定した列に、同じく引数で指定した関数を適用します。\index{contains@\texttt{contains()}}containsは、指定した文字列を含む列を検索します。
+
+特定の文字列ではなく、全ての列に処理を行う場合、containsの代わりにeverythingを使います。
+
+% mutate(across(
+%% everyting(), contains(),
+
+\section{作図}
+\label{graph}
+ここでは、\texttt{R}で作図する方法について説明します。最初の例のところでも出てきましたが、もう少し体系立てて説明します。
+
+\texttt{R}での作図は、\texttt{R}の組み込み関数を使うか、\verb|ggplot2|パッケージを使うかの2種類に大きく分けられます。より効率的に図を作成できるので、\index{ggplot2@ggplot2パッケージ}\verb|ggplot2|パッケージを使った作図について説明します。
+
+  \subsection{基本的な記法}
+\verb|ggplot2|による作図は、\verb|+|で図に必要な要素を次々と足していくことで行なわれますが（パイプ演算子\verb|%>%|と若干紛らわしいです）、基本的には以下のような記法となっています。
+\begin{itembox}[l]{ggplotによる作図}
+\begin{verbatim}
+ggplot(データ, aes(x軸やy軸として使うデータ、色などの指定))+
+  geom_xxx() # 丸、箱ひげなど様々な種類が用意されている
+\end{verbatim}
+\end{itembox}
+上記の通り、ggplot内に使うデータを指定し、\verb|geom_xxx|関数で描画する形に応じた関数を指定する、という流れです（色々例外はありますが）。
+
+以降では、具体的な描画例を示します。
+
+    \subsubsection{散布図}
+\begin{itembox}[l]{ggplotによる散布図}
+\begin{verbatim}
+p1 <- ggplot(data=treedf, aes(x=DBH, y=Debark))
+p1 <- p1 + geom_point()
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{scatter.pdf}\\
+\caption{散布図}
+ \label{scatter}
+\end{center}
+\end{figure}
+複数の点を描画する場合、\index{geompoint@\texttt{geom\_point()}}\verb|geom_point|を使います。
+
+    \subsubsection{棒グラフ}
+\begin{itembox}[l]{ggplotによる棒グラフ}
+\begin{verbatim}
+p2 <- ggplot(data=treedf, aes(x=Region))
+p2 <- p2 + geom_bar()
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{barplot.pdf}\\
+\caption{棒グラフ}
+ \label{barplot}
+\end{center}
+\end{figure}
+棒グラフの場合、\index{geombar@\texttt{geom\_bar()}}\verb|geom_bar|を使います。
+
+    \subsubsection{ヒストグラム}
+\begin{itembox}[l]{ggplotによるヒストグラム}
+\begin{verbatim}
+p3 <- ggplot(data=treedf, aes(x=DBH))
+p3 <- p3 + geom_histogram()
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{histogram.pdf}\\
+\caption{ヒストグラム}
+ \label{histogram}
+\end{center}
+\end{figure}
+ヒストグラムの場合、\index{geomhistogram@\texttt{geom\_histogram()}}\verb|geom_histogram|を使います。
+
+    \subsubsection{箱ひげ図}
+\begin{itembox}[l]{ggplotによる箱ひげ図}
+\begin{verbatim}
+p4 <- ggplot(data=treedf, aes(x=Region, y=DBH))
+p4 <- p4 + geom_boxplot()
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{boxplot.pdf}\\
+\caption{箱ひげ図}
+ \label{boxplot}
+\end{center}
+\end{figure}
+箱ひげ図の場合、\index{geomboxplot@\texttt{geom\_boxplot()}}\verb|geom_boxplot|を使います。
+
+    \subsubsection{ヴァイオリンプロット}
+\begin{itembox}[l]{ggplotによるヴァイオリンプロット}
+\begin{verbatim}
+p5 <- ggplot(data=treedf, aes(x=Region, y=DBH))
+p5 <- p5 + geom_violin()
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{violin.pdf}\\
+\caption{ヴァイオリンプロット}
+ \label{violin}
+\end{center}
+\end{figure}
+ヴァイオリンプロットの場合、\index{geomviolin@\texttt{geom\_violin()}}\verb|geom_violin|を使います。
+
+すでに述べたように、ggplotによる作図は次々と要素を足していきます。そのため、ヴァイオリンプロットに箱ひげ図を加えることも可能です。
+
+\begin{verbatim}
+p5 <- p5 + geom_boxplot(width = .2)
+\end{verbatim}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{violin2.pdf}\\
+\caption{ヴァイオリンプロットと箱ひげ図}
+ \label{violin2}
+\end{center}
+\end{figure}
+
+こうやって並べてみると、ヴァイオリンプロットの方が箱ひげ図より情報量が多いことがわかります。
+
+\verb|geom_xxx|は他にもたくさん種類があります。必要に応じて、ご自身で調べて下さい。
+
+\clearpage
+  \subsection{複数の図}
+ggplotを使うと、複数の図を描画することも容易です。複数の図を作る際、種類の異なる複数の図を描画する場合と、個々の図の要素は同じで用いるデータのカテゴリーだけが異なる複数の図を描画する場合があると思います。それぞれについて、解説します。
+
+    \subsubsection{異なる複数の図}
+ggplotで複数の図を並べるパッケージはいくつかありますが、ここでは\index{patchwork@patchworkパッケージ}\texttt{patchwork}パッケージを紹介します。
+\begin{itembox}[l]{異なる複数の図の描画}
+\begin{verbatim}
+library(patchwork)
+p1 + p2 + p3 + p5 + plot_layout(ncol=2)
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{patchwork.pdf}\\
+\caption{patchworkパッケージによる複数の図}
+ \label{patchwork}
+\end{center}
+\end{figure}
+ご覧いただければわかるように、ggplotで作成した図のオブジェクトを\verb|+|で足し合せ、\verb|plot_layout|で配置を指定するだけです。
+
+    \subsubsection{同じ形式の複数の図}
+\index{facetwrap@\texttt{facet\_wrap()}}\verb|facet_wrap|を使います。
+\begin{itembox}[l]{同じ形式の複数の図の描画}
+\begin{verbatim}
+p6 <- ggplot(data=treedf, aes(x=DBH, y=Debark))+
+  geom_point()+
+  facet_wrap(~Species, ncol=5)
+p6
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{facetwrap.pdf}\\
+\caption{同じ形式の複数の図}
+ \label{facetwrap}
+\end{center}
+\end{figure}
+描き分けるカテゴリーデータを、\verb|facet_wrap|内で指定するだけです。
+
+\clearpage
+  \subsection{装飾}
+では、ここから図の見た目を調整する方法を学びます。先ほど作った散布図に、装飾を加えます。
+    \subsubsection{軸ラベルの変更}
+\index{labs@\texttt{labs()}}\verb|labs|を使います。日本語を使う場合、OSによっては追加の指定が必要です。
+\begin{itembox}[l]{軸ラベルの変更}
+\begin{verbatim}
+p1 + labs(x="DBH (cm)", y="Occurrence of debarking")
+### 日本語を使う場合は、macの場合はフォントの指定が必要
+### Windowsの場合は不要
+p1 + labs(x="DBH (cm)", y="剥皮の有無")+
+  theme(text=element_text(family="HiraginoSans-W3"))
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{fig_axislabel.pdf}\\
+\caption{軸ラベルを指定した図}
+ \label{axislabel}
+\end{center}
+\end{figure}
+
+    \subsubsection{軸の間隔の調整}
+\index{scalexcontinuous@\texttt{scale\_x\_continuous()}}\verb|scale_x_continuous|を使います（x軸の場合。y軸の場合はxをyに置き換えて下さい）。
+\begin{itembox}[l]{軸mの間隔の調整}
+\begin{verbatim}
+p1 + scale_x_continuous(breaks=0:6*10)
+# 軸の範囲を指定する場合は、limits=c(xx, xx)のように指定する
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{fig_axisinterval.pdf}\\
+\caption{軸の間隔を変更した図}
+ \label{axisint}
+\end{center}
+\end{figure}
+
+    \subsubsection{シンボルのサイズや色の変更}
+単一のシンボルや色、サイズを指定する場合はaes外に、データに基づいて指定する場合はaes内に書きます。
+\begin{itembox}[l]{軸ラベルの変更}
+\begin{verbatim}
+p1 + geom_point(color="red", pch=16, size=4)
+### 透過色も指定できる
+p1 + geom_point(color=rgb(1,0,0,0.1), pch=16, size=4)
+### データに基づいて変更する場合は、aes内に書く
+p1 + geom_point(aes(color=Species), pch=16, size=4)
+#### シンボルの形を変更したい場合は、shape=で指定
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{fig_symbols.pdf}\\
+\caption{シンボルの色を変更した図}
+ \label{symbols}
+\end{center}
+\end{figure}
+
+    \subsubsection{凡例の変更}
+凡例は、タイトルのみ変更する場合と、個別の要素まで変更する場合で、書き方が異なります。
+\begin{itembox}[l]{凡例の変更}
+\begin{verbatim}
+### 凡例のタイトルはlabs内で変更
+p1 + geom_point(aes(color=Species), pch=16, size=4)+
+  labs(color="種")+
+  theme(text=element_text(family="HiraginoSans-W3"))
+### 凡例の要素ごとに変更する場合
+p1 + geom_point(aes(color=Species), pch=16, size=4)+
+  scale_color_hue(name="種", labels=str_c("種", 1:length(unique(treedf$Species))))+
+  theme(text=element_text(family="HiraginoSans-W3"))
+### 凡例をなくす場合
+p1 + geom_point(aes(color=Species), pch=16, size=4)+
+  theme(legend.position = "none", text=element_text(family="HiraginoSans-W3"))
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{fig_legend.pdf}\\
+\caption{凡例の要素ごとに変更を行なった図}
+ \label{legend}
+\end{center}
+\end{figure}
+
+    \subsubsection{背景周りの変更}
+\index{themebw@\texttt{theme\_bw()}}\index{themeclassic@\texttt{theme\_classic()}}ggplotは、標準だと背景に色がついています。これらを調整する方法です。
+\begin{itembox}[l]{背景の色を消す}
+\begin{verbatim}
+p1 + theme(panel.background = element_blank())
+# さすがに外枠の線ぐらい欲しい場合は、以下のように
+p1 + theme(panel.background = element_rect(fill = "transparent", colour = "black"))
+\end{verbatim}
+\end{itembox}
+
+また、ある程度変更が加えられたテーマが用意されており、こちらを使うという手もあります。
+\begin{itembox}[l]{組込みのテーマを使う場合}
+\begin{verbatim}
+### 白黒
+p1 + theme_bw()
+### 古典的な論文風
+p1 + theme_classic()
+### これらの用意されているテーマの中では、フォントの指定の仕方が若干異なる
+p1 + labs(x="DBH (cm)", y="剥皮の有無")+
+  theme_bw(base_family="HiraginoSans-W3")
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{1_basic/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{fig_theme_bw.pdf}\\
+\caption{白黒テーマを適用した図}
+ \label{themebw}
+\end{center}
+\end{figure}
+% group
+% labs
+% theme
+% theme_bw
+
+ggplotは、本当に多彩な図を描画することが可能です。ここでは全て紹介しきれませんので、興味のある方はご自身でさらに調べてみてください。
+
+  \subsection{図の保存方法}
+\index{ggsave@\texttt{ggsave()}}ggplotで作成した図は、以下の方法で保存できます。
+\begin{itembox}[l]{図の保存方法}
+\begin{verbatim}
+ggsave(file="xxx.pdf", device=cairo_pdf)
+\end{verbatim}
+\end{itembox}

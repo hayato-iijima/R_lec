@@ -1,0 +1,1058 @@
+\part{統計解析}
+\label{statglm}
+\section{はじめに}
+\ref{statglm}部は、\verb|R|を用いた統計解析、特に一般化線型モデル（Generalized Linear Model, GLM）と一般化線型混合モデル（Generalized Linear Mixed Model, GLMM）について説明します。GLMやGLMMを構築するためには、確率分布と尤度に関する知識が必要不可欠です。そこで、これ以降では、確率分布、尤度、GLM、GLMMを説明します。同時に、パラメータ推定をMarkov Chain Monte Carlo（MCMC）法で推定する方法を学びます。
+
+  \subsection{\ref{statglm}部の事前準備}
+以下のコマンドを実行しておきましょう。
+\begin{verbatim}
+# 作業ディレクトリの設定
+## GUIを使う方はここで指定
+## コマンドで指定する
+### 絶対パス版
+setwd("/Users/hayatoiijima/Library/CloudStorage/Box-Box/R_lec")
+### 相対パス版
+setwd(file.path(path.expand("~"), "Library", "CloudStorage", "Box-Box", "R_lec"))
+# パッケージの読み込み
+library(here)
+library(tidyverse)
+library(readxl)
+\end{verbatim}
+
+また、MCMCを実行するためにNIMBLEを用いますが、osに応じて以下のインストールをお願いします。
+\begin{description}
+  \item[Windows]ご自身の\texttt{R}のバージョンに合わせた、Rtools（\url{https://cran.r-project.org/bin/windows/Rtools/}）
+  \item[macOS]Xcode（Apple Storeから）
+\end{description}
+
+  \subsection{ベイズ統計とは？}
+GLMやGLMMは、ある目的変数に影響を与える要因を検討する際に広く用いられているモデルです。また、これら自体も有用ですが、これらを組み合わせてより複雑なモデルを作ることも可能です。そして、モデルが複雑になると、パラメータ推定にベイズ統計が必要になってきます。
+
+ベイズ統計とは、\index{べいずのていり@ベイズの定理}ベイズの定理に基づいてパラメータを推定する統計します。ベイズの定理は、以下の通りです。
+\begin{align}
+p(A, B) = p(A|B)p(B) = p(B|A)p(A) \\
+p(A|B) = \dfrac{p(B|A)p(A)}{p(B)}
+\end{align}
+ここで、$p(A, B)$はAとBが起こる確率、$p(A|B)$はBが起こったという条件でAが起こる確率、$p(B|A)$はAが起こったという条件でBが起こる確率、$p(A)$はAが起こる確率、$p(B)$はBが起こる確率です。ここで、Aを推定したいパラメータ（$\theta$）、Bをデータ（D)と置き換えると、ベイズの定理は以下のようになります。
+\begin{equation}
+p(\theta|D) = \dfrac{p(D|\theta)p(\theta)}{p(D)}
+\end{equation}
+ここで、$p(D|\theta)$はパラメータが与えられた場合のデータが得られる尤もらしさであり、のちに説明する尤度です。$p(\theta)$は事前情報です。$p(D)$はデータの周辺確率で、これを知ることは出来ませんが、$p(D)$は事後分布の確率を1に収めるための規格化定数ですので、パラメータの推定には影響しません。そのため、上記のベイズの定理は、
+\begin{equation}
+p(\theta|D) \propto p(D|\theta)p(\theta)
+\end{equation}
+のように書かれることもあります。
+
+このベイズの定理に基づけば、ベイズ統計では常に以下のような手続きを取ることになります。
+\begin{enumerate}
+\item 知りたい未知の量を$\theta$とする。
+\item データをDとする。
+\item $p(\theta|D)$をベイズの定理に基づいて計算する。
+\end{enumerate}
+
+ベイズ統計の利点としては、複雑なモデルを柔軟に構築できること、推定するパラメータの不確実性を推定できることがあると飯島は考えています（異論はあると思います）。生態学は過程が複雑でありそれを表現するモデルも複雑になること、特に応用生態学では推定した結果の不確実性を示すことが求められることから、ベイズ統計に基づいたモデル構築とパラメータ推定方法を学ぶことが有益であると飯島は考えています。
+
+一方、ベイズ統計の利点として、事前に有している知識や情報、あるいは過去の推定結果を事前分布として考慮できる点（ベイズ更新）も挙げられます。しかし、事前に有している知識や情報を事前分布に反映させることは、ややもすると恣意的な推定になりかねないことから、合理的な理由が無い限り行わない方がよいと飯島は考えています。また、計算機速度が向上した現在では、現在使える全てのデータを使って、過去の状態も含めて一度にパラメータを推定する方が合理的だと思います。
+
+\begin{table}
+\begin{center}
+\caption{統計学における主要概念の比較}
+\label{philosophy}
+\begin{tabularx}{\textwidth}{lXX} \toprule
+ & 頻度主義 & ベイズ主義（ベイズ統計） \\ \midrule
+パラメータの考え方 & 唯一無二の正しい値が存在 & 事後分布として表現（不確実性がある） \\
+パラメータの主な推定法 & 最尤法 & MCMC法、最尤法 \\
+事前分布 & 不要 & 必要 \\ \bottomrule
+\end{tabularx}
+\end{center}
+\end{table}
+
+\clearpage
+\section{\index{かくりつぶんぷ@確率分布}確率分布}
+確率分布を、何故理解する必要があるのでしょうか。我々が扱う対象は、実験データの場合もあれば野外の場合もあるでしょう。実験する場合も野外調査をする場合も、扱う対象の条件を完全に制御することはできません。実験の場合、扱う材料や実験器具を完全に同一にすることはできませんし、実験による対象の反応について完全な知識を持っているわけではありません。野外についてはもう絶望的で、同じ種であっても個体差がありますし、野外では様々な環境条件が同時に変動しています。そして、いずれの場合でも人間が実験や調査をする以上、完璧な観測は不可能です。そのため、得られるデータには様々な「誤差」が含まれます（誤差と一口に言っても、様々な誤差があります。自分がどのような誤差を取り扱える、扱えないのか意識することは、非常に重要です）。
+
+このような「誤差」を表現するのに有効なのが、確率分布です。以下では、生態学の分野で特に重要な確率分布について、説明します。
+
+まず、Rの乱数生成関数の使い方を説明します。乱数を使いこなせると、擬似的なデータを生成できます。データを自分で生成することが、実は階層モデルの理解に有効です。ここでは、以下の関数を紹介します。
+\begin{itemize}
+  \item \verb|rnorm(生成するデータ数, 平均, 標準偏差)|：正規分布に従う乱数を生成
+  \item \verb|rpois(生成するデータ数, 平均)|：ポアソン分布に従う乱数を生成
+  \item \verb|rbinom(生成するデータ数, 総試行回数, 生起確率)|：二項分布に従う乱数を生成
+\end{itemize}
+ちなみに、\verb|R|では関数名の前に$?$をつけて打ち込む（例えば\verb|?rnorm|）と、ヘルプが表示されます。使いたい関数名が分かっていて関数の使用を調べたいときに有用です。
+
+\subsection{\index{せいきぶんぷ@正規分布}正規分布}
+正規分布は、ある平均周辺にある程度のばらつきを持って分布する$-\infty$から$\infty$までの実数を表現する確率分布で、平均と分散という2つのパラメータを持ちます。ある確率分布に由来するデータを取得してその平均値を取ることを繰り返した場合にその平均値の分布が正規分布になるという「中心極限定理」のため、正規分布はこれまで様々な統計的検定に用いられてきました。一般に、長さや重量などは正規分布に従うとされています。正規分布の確率密度関数は、以下のとおりです。
+\begin{itembox}[l]{正規分布}
+\begin{equation}
+f(x) = \dfrac{1}{\sqrt{2\pi\sigma^{2}}}\exp(-\dfrac{(x - \mu)^{2}}{2\sigma^{2}})
+\end{equation}
+\end{itembox}
+ここで$\mu$は平均、$\sigma$は標準偏差（$\sigma^2$が分散）、$x$はデータです。正規分布の形は、$\mu$や$\sigma$を変えると変わります（図\ref{Norm}）。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,clip]{Norm.eps}\\
+\caption{正規分布}
+\label{Norm}
+\end{center}
+\end{figure}
+
+では、この正規分布に従う乱数を自分で作ってみましょう。以下のようにRに打ち込んで見て下さい。
+\begin{verbatim}
+set.seed(1) #乱数の種の指定（同じ結果を得るため）
+rnorm(100, 0, 1)
+  [1] -0.626453811  0.183643324 -0.835628612
+  [4]  1.595280802  0.329507772 -0.820468384
+（以下略）
+\end{verbatim}
+\verb|rnorm(作りたい乱数の数, 平均, 標準偏差)|のように使います。このように、\verb|R|では種々の乱数を非常に簡単に作ることができます。あまりに簡単すぎて、本当に正規分布の乱数が作れたのか疑問に思うかもしれません。では、得られた値のヒストグラムを書いてみましょう。
+\begin{verbatim}
+hist(rnorm(100, 0, 1))
+\end{verbatim}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{hist_rnorm.pdf}\\
+\caption{生成した正規分布のヒストグラム}
+\label{hist_rnorm}
+\end{center}
+\end{figure}
+確かに、正規分布に従う乱数が生成できているようです。Nを大きくしていけば、さらに正規分布のような形になります。
+
+\begin{exercise}{正規乱数の生成}{rnorm1}
+\begin{itemize}
+  \item 平均が-1、標準偏差が3の正規乱数を10000個生成し、ヒストグラムで描画せよ。ヒストグラムは、\verb|hist()|関数や、\verb|ggplot2|の\verb|geom_histogram|関数で作成できる。
+\end{itemize}
+\end{exercise}
+
+\subsection{\index{にこうぶんぷ@二項分布}二項分布}
+二項分布は、総試行回数$n$の内、成功する（事象が生起する）回数$k$を表現する確率分布で、生起確率$p$という1つのパラメータを持ちます。コイン投げをして表が出る回数、調査個体の内死亡した個体数などは二項分布に従うと考えられます。二項分布は回数という0以上の整数のみを扱うため、得られる値は離散的です。その確率質量関数は、以下のとおりです。
+\begin{itembox}[l]{二項分布}
+\begin{equation}
+P[X=k] = \begin{pmatrix}
+n \\
+k
+\end{pmatrix}
+p^{k}(1-p)^{n-k}
+\end{equation}
+\end{itembox}
+ここで$p$は生起確率です。二項分布の形は$p$を変えると変わります（図\ref{binom1}）。
+
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{binom1.pdf}\\
+\caption{生起確率の違いと二項分布の形の違い}
+\label{binom1}
+\end{center}
+\end{figure}
+二項分布は正規分布と異なり、ばらつきを指定するパラメータがありません。そのため、二項分布は生起確率$p$が決まるとばらつきも決まります。また、二項分布は総試行回数$n$に応じて取り得る値の範囲が決まってしまうので、生起確率$p$の値によってばらつきが異なります。
+
+また、試行回数の違いによって精度が異なる点にも注意が必要です（図\ref{binom2}）。感覚的にも、10回コイン投げをして5回表が出たデータによって「このコインの表が出る確率は0.5だ」と結論するよりも、100回コイン投げをして50回表が出たデータによって「このコインの表が出る確率は0.5だ」と結論する方が確からしいと思います。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{binom2.pdf}\\
+\caption{試行回数の違いと二項分布の形の違い}
+\label{binom2}
+\end{center}
+\end{figure}
+
+では、この二項分布に従う乱数を作ってみましょう。
+\begin{verbatim}
+set.seed(1) #乱数の種の指定（同じ結果を得るため）
+# 総試行回数が1の場合（=ベルヌーイ分布）
+rbinom(100, 1, 0.5)
+  [1] 0 0 1 1 0 1 1 1 1 0 0 0 1 0 1 0 1 1 0 1 1 0 1 0 0
+ [26] 0 0 0 1 0 0 1 0 0 1 1 1 0 1 0 1 1 1 1 1 1 0 0 1 1
+ （途中省略）
+# 総試行回数が10の場合
+rbinom(100, 10, 0.5)
+  [1] 6 4 4 9 6 4 3 5 7 5 8 6 4 5 3 2 6 3 5 6 9 5 5 4 6
+ [26] 5 5 4 4 5 5 3 2 6 7 5 5 5 8 5 6 5 4 4 6 5 4 6 3 7
+ （途中省略）
+\end{verbatim}
+
+\begin{exercise}{二項乱数の生成}{rbinom1}
+\begin{itemize}
+  \item 100回コイントスをした時に得られるの表（1）と裏（0）のデータを生成せよ。ただし、表が出る確率は0.5とする。
+\end{itemize}
+\end{exercise}
+
+\subsection{\index{ぽあそんぶんぷ@ポアソン分布}ポアソン分布}
+ポアソン分布は、一定時間内に事象が生起する回数$k$を表現する確率分布で、一定時間内の事象の生起回数に関する$\lambda$という1つのパラメータを持ちます。一定時間内に電話がかかってくる回数、一定区画内に出現するある種の個体数などはポアソン分布に従うと考えられます。ポアソン分布も二項分布同様に、得られる値は離散的です。その確率質量関数は、以下のとおりです。
+\begin{itembox}[l]{ポアソン分布}
+\begin{equation}
+P[X=k] = \dfrac{\lambda^{k}e^{-\lambda}}{k!}
+\end{equation}
+\end{itembox}
+
+ポアソン分布も二項分布同様、ばらつきを指定するパラメータはありません。そのため、
+$\lambda$の値が決まるとばらつきも決まります（図\ref{Pois}）。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,clip]{Pois.eps}\\
+\caption{ポアソン分布}
+\label{Pois}
+\end{center}
+\end{figure}
+
+では、やはり同じように、ポアソン分布に従う乱数を作ってみましょう。
+\begin{verbatim}
+set.seed(1) #乱数の種の指定（同じ結果を得るため）
+rpois(100, 3)
+  [1] 2 2 3 5 2 5 6 4 3 1 2 1 4 2 4 3 4 8 2 4 6 2 4 1 2
+ [26] 2 0 2 5 2 3 3 3 1 5 4 4 1 4 2 5 3 4 3 3 4 0 3 4 4
+（途中省略）
+\end{verbatim}
+
+\begin{exercise}{ポアソン乱数の生成}{rpois1}
+\begin{itemize}
+  \item 同じ大きさの区画100箇所において、アカネズミの数を調査したときに得られるアカネズミの計数データを生成せよ。ただし、100個の区画のアカネズミの計数値のばらつきは、平均5のポアソン分布に従うことが分かっている。
+\end{itemize}
+\end{exercise}
+
+\clearpage
+\section{\index{ゆうど@尤度}尤度}
+\begin{itembox}[l]{注！}
+ \begin{itemize}
+  \item ここの文章は粕谷（1997）の最尤法の説明をほぼそのまま使わせてもらっています。
+ \end{itemize}
+\end{itembox}
+尤度とは、「あるデータが得られたときに、ある
+確率分布の元でデータをどれだけ尤もらしく表現できているかを示すもの」で
+す（確率ではありません）。そして、尤度が最も高くなるようなパラメータの値をパラメータの妥当な推定値と考える考え方を、最尤法といいます。以下では、具体例で尤度と最尤法を説明します。
+
+$n$回コイントスをして表か裏かを調べ、
+$r$回表、$(n - r)$回裏が出たとしたときに、表が出る確率は以下の二項分布
+で定義できます。この$L(p|r)$が、\textbf{尤度}です。尤度は、データによく当
+てはまっているほど\textbf{値が大きくなります}。
+\begin{equation}
+\begin{split}
+ L(p|r) &= \begin{pmatrix} \mathrm{n} \\ r \end{pmatrix}
+ p^r(1 - p)^{(n - r)} \\
+ &= {_{n}\mathrm{C}_{r}} p^r(1 - p)^{(n - r)}
+\end{split}
+\end{equation}
+
+例えば3回コイントスをして2回表だったとします。こ
+のデータだけから「このコインの表が出る確率は？」と問われたら、ほとんどの
+人が（表が出た回数）/（全試行回数）で$2/3 = 0.6666...$と答えるでしょう。
+「コインの表が出る確率」は、二項分布のパラメータである生起確率$p$と同じ
+ものです。
+
+では、$p = 2/3$にすると、本当に尤度は最大になるのでしょうか？図を描いて
+見ましょう。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=15cm,clip]{likelihood.eps}\\
+\caption{パラメータを変化させたときの二項分布の尤度}
+ \label{like}
+\end{center}
+\end{figure}
+この図からわかるように、$p = 2/3$が尤度を最も大きくする値のようです。
+では、3回コイントスして2回表が出た場合に、$p$を2/3にすると何故尤度が最も大きくなるのでしょうか？
+
+尤度に関わらず、ある関数の変曲点はその関数を微分する
+ことで求めることができます。今回は「3回コイントスして2回表が出た」という
+データが得られているので、そのときの尤度を微分して、
+尤度が最大となる$p$を求めることができます。
+
+\begin{equation}
+\begin{split}
+ L(p|r) &= {_{3}\mathrm{C}_{2}} p^2(1 - p)^{(3 - 2)}\\
+ &= 3 \times p^2 (1 - p) \\
+\end{split}
+\end{equation}
+
+この尤度を微分すると、
+\begin{equation}
+\begin{split}
+ L(p|r)' &= 6p - 9p^2 = 0 \\
+ &= p(6 - 9p) = 0 \\
+ &= p = 2/3 \text{ or } 0
+\end{split}
+\end{equation}
+となり、$2/3$が導かれました。この、
+\begin{itemize}
+ \item $p = 2/3$を求める方法が\textbf{最尤法\index{さいゆうほう@最尤法}}
+       （尤度という基準で確率分布のパラメータをデータ
+       に尤も当てはまるように決める）
+ \item $p = 2/3$が\textbf{最尤推定値\index{さいゆうすいていち@最尤推定値}}。
+\end{itemize}
+です。
+
+ベイズ統計では、事後確率はこの尤度と事前確率に比例します（$p(\theta|D) \propto p(D|\theta)p(\theta)$）。事前確率に情報をほとんど与えなければ、事後確率は尤度に比例します。そのため、ベイズ統計においても、所与のモデルの元でデータを表現できるようなパラメータを推定しようとすることに、変わりはありません。
+
+   \subsection{\index{たいすうゆうど@対数尤度}対数尤度}
+対数尤度とは、\textbf{尤度の対数をとったもの}です。実際の線形モデルにおける最尤法は、対
+数尤度を対象と
+して実行されることがほとんどです。
+
+なぜかというと、使うのは尤度でも対数尤度でもどちらでもいいのですが、計算
+は対数尤度でないと最尤推定値が求められな
+いことが多いからです。例えば正規分布を例にとって見ましょう。
+
+$y = y_1, y_2, ...., y_{100}$という100個のデータがあったときに、$y_1$が
+得られる尤もらしさ（尤度）は、
+\[
+ \dfrac{1}{\sqrt{2\pi}\sigma}\exp(-\dfrac{1}{2\sigma^{2}}(y_1 -
+\mu)^{2})
+\]
+と定義できます。同じように$y_2$、$y_{100}$なども得られますが、
+これらのデータ$y$が得られる尤度を最も大きくするためには、（$y_1$が得られ
+る尤度）$\times$（$y_2$が得られる尤度）
+$\times$.........$\times$（$y_{100}$が得られる尤度）を最も大きくする必要
+があります。この尤度を$L(\mu, \sigma^{2} | y)$とすると、
+\begin{eqnarray*}
+ L(\mu, \sigma^{2} | y) &=& \prod^{100}_{i = 1}
+ \dfrac{1}{\sqrt{2\pi}\sigma}\exp(-\dfrac{1}{2\sigma^{2}}(y_i -
+ \mu)^{2}) \\
+ &=& (\dfrac{1}{\sqrt{2\pi}\sigma})^{100}\exp(-\sum^{100}_{i =
+ 1}\dfrac{(y_{i} - \mu)^{2}}{2\sigma^{2}})
+\end{eqnarray*}
+となり、解を解析的に求めることが難しくなります。そこで対
+数をとります。対数をとった先ほどの尤度を$\text{log}L(\mu, \sigma^{2} | y)$とすると、
+\begin{eqnarray*}
+  \text{log}L(\mu, \sigma^{2} | y) &=&
+  \log ((\dfrac{1}{\sqrt{2\pi}\sigma})^{100}\exp(-\sum^{100}_{i =
+ 1}\dfrac{(y_{i} - \mu)^{2}}{2\sigma^{2}})) \\
+ &=& -100 \times \log (\sqrt{2\pi}\sigma) - \sum^{100}_{i =
+  1}\dfrac{(y_{i} - \mu)^{2}}{2\sigma^{2}} 
+\end{eqnarray*}
+となり、結局のところ$(y - \mu)^{2}/2\sigma^{2}$の部分を微分すれば最尤推
+定値が求まることになります。対数尤
+度にすると計算が楽になることが多いの
+で、ほとんどの場合対数尤度を用います。
+
+\clearpage
+\section{\index{GLM@GLM（一般化線形モデル）}GLM（一般化線形モデル）}
+GLMとは、Generalized Linear Modelの略です。線形モデルとは説明変数が線形に結合（和）したモデルのことで、残差の分布として単一の確率分布ではなく指数型分布属の確率分布を適用できるように拡張したものなので一般化が付いています。GLMの基本的な構造は、以下のとおりです。
+\begin{align}
+\eta &= \beta X^{T} \label{glm1}\\
+\eta &= g(\mu) \label{glm2} \\
+\mathrm{Data} &\sim \text{Probability distribution}(\mu)\label{glm3}
+\end{align}
+式\ref{glm1}は\textbf{決定論的モデル（Deterministic model）}、式\ref{glm3}は\textbf{確率論的モデル（Stochastic model）}と呼ばれます。そして、式\ref{glm2}の関数$g()$はリンク関数と呼ばれます。これらの存在を意識することは、適切な解析を行うために重要です。
+\begin{itemize}
+ \item \index{けっていろんてきもでる@決定論的モデル}決定論的モデル: 説明変数と応答変数の関係性を示したもの。自分が
+       どう現象を捉えているかといってもいい。
+ \item 確率論的モデル: 得られる現象がどのような確率的変動をもって生じ
+       るかに関する仮説。
+  \item リンク関数: 決定論的モデルの予測値（線形予測子）を、確率論的モデルで採用する確率分布のパラメータに求められる条件に変換するための関数。
+\end{itemize}
+	\subsection{\index{かくりつろんてきもでる@確率論的モデル}確率論的モデル}
+先ほど、自分がどのように現象を捉えているか表現したのが決定論的モデルだと説明しました。しかし、繰り返し述べているように、データの観測には様々な誤差が含まれます。そのため、得られたデータのばらつきを決定論的モデルだけで説明することはできません。
+
+この、観測誤差を確率分布で表現したものが、確率論的モデルです。
+つまり、\textbf{観測される現象は決定論的モデルと確率論的モデルの両方が作用
+して観測される}といえます（図\ref{detsto}）。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=15cm,clip]{detsto.eps}\\
+\caption{実データと決定論および確率論的モデルの関係}
+ \label{detsto}
+ \begin{flushleft}
+\scriptsize 上段が実データ、中段が決定論的モデル
+  による予測、下段が確率論
+  的モデルを加えた図。下段
+  では、確率論的モデルによっ
+  て予測される値の発生  確率が、太線で示されている。二項分布の図では、X軸の値が0.1毎に平均したYの値を、
+  赤丸で示している。
+\end{flushleft}
+\end{center}
+\end{figure}%
+
+	\subsection{\index{りんくかんすう@リンク関数}リンク関数}
+我々が興味があるのは、決定論的モデルによる予測が観測された現象とどのような関係にあるのかということです。これは、決定論的モデルに組み込んだ要因の係数を推
+定するという問題として考えることができます。
+
+では、係数の推定はどのような基準で行えばよいのでしょうか？観測される現象
+を表現する確率分布の形は、そのパラメータによって決定されます。そのため、
+\textbf{観測される現象に関する確率分布のパラメータを、決定論的モデルによって、観測される現象に最も当てはまるように決定}すればいいことになります。決定論的モデル
+の挙動は、そのモデルに組み
+込まれた要因の係数や切片によって決まりますから、係数や切片を観測された現
+象が最もよく再現できるように決定する、と考えることができます。
+
+しかし、決定論的モデルによる予測値（線形予測子）が取り得る値は、そのままでは確率論的モデルのパラメータとして適切でない可能性があります。例えば、二項分布のパラメータ$p$は、必ず0から1の間でなくてはなりません。
+
+ここで登場するのが、リンク関数です。リンク関数は、線形予測子を、確率分布のパラメータとして用いることができるように変換するための関数です。二項分布の例を挙げます。
+\begin{verbatim}
+x <- (-10):10      # 決定論的モデルの予測値
+p <- 1/(1+exp(-x)) # xを0から1に収まるように変換
+                   # これはlog(p/(1-p)) <- xと等しい
+                   # log(p/(1-p))はロジットリンク関数
+plot(p ~ x)
+\end{verbatim}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{logit_link.pdf}\\
+\caption{ロジットリンク関数を適用した結果}
+\label{logit_link}
+\end{center}
+\end{figure}
+
+\begin{table}[htb]
+\begin{center}
+\caption{確率分布とリンク関数}
+\label{link_func}
+\begin{tabular}{ccc} \toprule
+ & リンク関数（標準） & 式 \\ \midrule
+正規分布 &  identity &  \\ 
+二項分布 & logit &  $\log(\dfrac{p}{1-p})$ \\ 
+ポアソン分布 & log & log(x) \\ \bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+以上を踏まえると、GLM
+は以下の手順から構築されます。
+\begin{itemize}
+ \item 観測される（説明したい）現象が、何らかの確率分布に従って生じると
+       仮定。すなわち、確率論的モデルの決定。
+ \item 考えている要因から観測される現象を説明するモデルを作成。すなわち、
+       決定論的モデルの決定。
+ \item 観測される現象を最もよく表現できるように、確率分布のパラメータ、
+       すなわち決定論的モデルの係数を推定する。
+\end{itemize}
+
+「観測される現象を最もよく表現できる」ということを評価する指標として、すでに説明した尤
+度（\textit{Likelihood}）を用いることができます。
+
+	\subsection{データの読み込み}
+では、GLMに関する知識を習得したところで、実際にGLMのパラメータ推定を行ってみます。\ref{basic}部で用いたデータを、再度読み込みます。
+\begin{itembox}[l]{用いるデータの読み込み}
+\begin{verbatim}
+# 自動撮影カメラのデータ
+cam_files <- list.files(here(file.path("data", "camera")),
+  recursive=TRUE, pattern="*.xlsx") 
+cam_df <- read_excel(here(file.path("data", "camera"), cam_files[1]),
+  sheet="Sheet 1")
+for (i in 2:length(cam_files)) {
+  cam_df <- cam_df %>%
+    bind_rows(., read_excel(here(file.path("data", "camera"), cam_files[i]),
+      sheet="Sheet 1"))
+}
+deerphoto <- cam_df %>%
+  mutate(Region=str_extract(cam_id, "^[^_]+")) %>%
+  filter(str_detect(species, "deer")) %>%
+  group_by(Region) %>%
+  reframe(Deer=sum(count))
+# Region単位のデータ
+regioninfo <- read_excel(here("data", "data.xlsx"), sheet="Region")
+# Stand単位のデータ
+standinfo <- read_excel(here("data", "data.xlsx"), sheet="Stand")
+# 毎木データ
+treedf <- read_excel(here("data", "data.xlsx"), sheet="Trees") %>%
+  inner_join(., deerphoto, by=c("Region")) %>%
+  inner_join(., regioninfo, by=c("Region")) %>%
+  inner_join(., standinfo, by=c("Region", "Stand"))
+\end{verbatim}
+\end{itembox}
+\ref{basic}部で述べたように、このデータは、ニホンジカが多い地域では、
+ニホンジカによる樹皮剥ぎが多く、また稚樹の本数は少ないという仮説を検証するために得られたものです。ひとまず、以下では樹皮剥ぎに関する解析を行います。
+
+樹皮剥ぎは、樹種による差があり、また木の太さも影響することが知られています。
+
+	\subsection{\texttt{R}の関数によるGLM}
+		\subsubsection{GLMの構成要素}
+すでに説明したように、GLMの構成要素は以下のとおりです。
+\begin{description}
+	\item[決定論的モデル]解析者が考えた「要因」と「現象」の関係を説明するモデル
+	\item[確率論的モデル]決定論的モデルで説明できない「ばらつき」を説明するモデル
+	\item[リンク関数]決定論的モデルによる予測値を確率分布の条件に適合するように変換する関数
+\end{description}
+今回のデータでは、シカの多さ、樹種、木の太さが要因であり、樹皮剥の有無が現象です。この考えが、決定論的モデルです。では、実際にこれらのデータはどのような関係になっているでしょうか。
+
+\begin{verbatim}
+library(ggplot2)
+library(patchwork)
+p1 <- ggplot(data=treedf, aes(x=Deer, y=Debark))+
+      geom_point(pch=16, col=rgb(0,0,0,0.05))
+meandb <- treedf %>% group_by(Species) %>% reframe(Debark=mean(Debark))
+p2 <- ggplot(data=meandb, aes(x=Species, y=Debark))+
+      geom_bar(stat = "identity")+
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+p3 <- ggplot(data=treedf, aes(x=DBH, y=Debark))+
+      geom_point(pch=16, col=rgb(0,0,0,0.05))
+(p1 | p3) / p2
+\end{verbatim}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{glm_data.pdf}\\
+\caption{説明変数と応答変数の関係}
+\label{glm_data}
+\end{center}
+\end{figure}
+
+シカが多く、木が細いと剥皮が多そうです。また、樹種によって剥皮のされやすさは異なっていそうです。ただし、いずれのデータもばらつきは大きく、要因で全てが説明できるわけではなさそうです。説明変数で説明できない部分は、もちろん決定論的モデルで考慮していない要因も影響していると思われますが、今回はそのようなデータを持っていません。このような関係が本当に存在するかを、GLMで推定します。
+
+\verb|R|には、\verb|glm()|という便利な関数が用意されています。この関数中で、先程確認した決定論的モデル、確率論的モデル、リンク関数を指定し、GLMのパラメータを推定します。ただし、都合上、樹種は今回は要因として含めないことにします。
+\begin{verbatim}
+res <- glm(Debark ~ Deer + DBH, family=binomial(link="logit"), data = treedf)
+summary(res)
+
+Call:
+glm(formula = Debark ~ Deer + DBH, family = binomial(link = "logit"), 
+    data = treedf)
+
+Coefficients:
+             Estimate Std. Error z value Pr(>|z|)    
+(Intercept)  0.121656   0.210947   0.577   0.5641    
+Deer         0.002431   0.001104   2.201   0.0277 *  
+DBH         -0.076888   0.006795 -11.316   <2e-16 ***
+（以下、省略）
+\end{verbatim}
+\verb|glm()|の結果は、\verb|summary()|で取り出すことができます。結果の見方については、ここでは解説しません。
+
+なお、\verb|glm()|関数では、標準のリンク関数の場合リンク関数の指定は省略可能です。また、用いるデータを示す\verb|data|も明示する必要はありません。そのため、上記のコードは以下のように省略可能です。
+\begin{verbatim}
+res <- glm(Debark ~ Deer + DBH, family=binomial, treedf)
+\end{verbatim}
+
+    \subsubsection{GLMの結果の作図}
+ggplotを使うと、GLMによる予測曲線を簡単に描画することができます。
+\begin{itembox}[l]{GLMによる予測曲線}
+\begin{verbatim}
+p1 <- ggplot(data=treedf, aes(x=DBH, y=Debark))+
+      geom_point(pch=16, col=rgb(0,0,0,0.1), size=3)+
+      geom_smooth(method="glm", se=TRUE,
+        method.args=list(family=binomial(link="logit")))
+p1
+\end{verbatim}
+\end{itembox}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{glm_predict.pdf}\\
+\caption{GLMの予測曲線の描画}
+\label{glm_predict}
+\end{center}
+\end{figure}
+なお、\verb|geom_smooth|で描画できるのは、説明変数が1つのモデルです。すでに行ったような、説明変数が複数あるGLMの予測結果を描画したい場合は、\verb|ggeffects|パッケージを使ってください。
+
+	\subsection{MCMC法}
+Rの関数を使えば、このようにGLMのパラメータ推定は容易に実行できます。しかし、以下ではGLMのパラメータ推定をMCMC法で行います。
+\subsubsection{MCMC法の概要}
+MCMC法は、確率分布から値をサンプリングするための手法です。求めたい確率分布（ベイズ統計においては事後分布）からの乱数を生成し、得られたサンプルから求めたい確率分布を推測します。
+
+MCMC法は、適当な初期値を与え、そこから値を変化させ、尤度が高い値を優先的にサンプリングします。そして、MCMC法では一つ前にサンプリングされた値に依存して次のサンプリング値が決まりますので、サンプリング値はお互いに独立ではありません。このため、サンプリングは同時に複数行います。それぞれのサンプリングを連鎖と呼びます。
+
+MCMC法を実行し、もしデータに対して適切なモデルを構築すれば、サンプリングされる値は、各連鎖で同じような値を取るようになります（図\ref{mcmctrace_example}）。同じような値周辺をサンプリングし続けることで、求めたい確率分布の\index{ていじょうぶんぷ@定常分布}定常分布が得られます。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{mcmctrace_example.pdf}\\
+%\includegraphics[width=30\zw,clip]{posterior.eps}\\
+\caption{MCMC法によるサンプリングの過程}
+\label{mcmctrace_example}
+\end{center}
+\end{figure}
+
+MCMC法は、一つ前にサンプリングされた値に依存して次のサンプリング値が決まることから、モデルによってはサンプリングされる値が変化しにくいことがあります。また、図\ref{mcmctrace_example}からわかるように、サンプリング開始からしばらくは初期値の影響を受けています。そのため、MCMC法では、以下の値を設定する必要があります。
+\begin{itemize}
+	\item 連鎖の数。
+	\item 初期値の影響を受けているので破棄すべきサンプリング数（\verb|burn-in|）。
+	\item サンプリングする間隔（thining）。
+\end{itemize}
+
+定常分布が得られたのかを判断する指標として、\index{Rhat@$\hat{R}$}$\hat{R}$（R上ではR hatと表記されます）値があります。$\hat{R}$値は、サンプリング値の連鎖間のばらつきをサンプリング値の連鎖\textgt{内}のばらつきで割ったものです。$\hat{R}$が1.1未満であれば、パラメータは収束したと判断できます（Gelman et al. 2004）。
+\begin{itemize}
+\item Gelman A, Carlin JB, Stern HS, Rubin DB (2004) Bayesian Data Analysis. Chapman \& Hall, New York.
+\end{itemize}
+ただし、$\hat{R}$値は上記の通り、連鎖間のサンプリング値の乖離度しか評価していません。このため、サンプリング値が上昇、あるいは減少傾向にないかを判断するため、サンプリングの過程を目視で確認する必要があります。
+
+		\subsubsection{MCMC法の実行ソフトウェア}
+MCMC法を実行できるソフトウェアには、主に以下のものがあります（表\ref{software}）。
+\begin{table}
+\begin{center}
+\caption{MCMC法の実行ソフト}
+\label{software}
+\begin{tabularx}{\textwidth}{lXXX} \toprule
+ & \index{JAGS@JAGS}JAGS & \index{NIMBLE@NIMBLE}NIMBLE & \index{Stan@Stan}Stan \\ \midrule
+ 利用可能OS &  Windows、Mac、Linux &  Windows、Mac、Linux & Windows、Mac、Linux \\ 
+ Rのパッケージ & \verb|rjags|など & \verb|nimble| & \verb|rstan| \\
+ 長所 & 並列化が容易（\verb|jagsUI|パッケージ）。 & 計算が早い。空間相関を推定可能。 & 収束が早い。エラー箇所の特定が容易。空間相関を推定可能。並列化が容易。 \\ 
+ 短所 & 計算が遅い & 並列計算は自分で並列関数で定義する必要がある & 離散パラメータを推定できない。変数宣言などの規則が少し難しい。 \\ \bottomrule
+\end{tabularx}
+\end{center}
+\end{table}
+NIMBLEは、Stanと同様にモデルを内部で\verb|C++|言語に変換するので計算が早い一方、初学者にも理解しやすいBUGS言語でモデルが記述できるので、今回はNIMBLEを使います。
+
+JAGSとNIMBLEは、BUGS言語の部分はほぼ完全に互換性があり、かつNIMBLEの方がより多くの組み込み関数が使えます。データを準備するところで、JAGSはすべてのデータを単一のリスト形式で用意する一方、NIMBLEは後述するように定数とデータを分けて用意するところが異なります。また、MCMC法の実行関数も異なっています。
+
+		\subsubsection{パラメータ推定の手順}
+NIMBLEによるパラメータ推定を実行する基本的な手順は、以下の通りです。
+\begin{itemize}
+\item BUGS言語によるモデルの記述
+\item データの準備
+\item 初期値の設定
+\item 監視対象パラメータの設定
+\item MCMC法の条件設定
+\item MCMC法の実行
+\item 結果の検証
+\end{itemize}
+
+	\subsection{BUGS言語によるモデルの記述}
+NIMBLEでは、\index{BUGSげんご@BUGS言語}BUGS言語という言語でモデルを記述する必要があります。BUGS言語はR言語と非常によく似ており、初学者でも習得しやすい言語だと思います。
+
+では、上記のGLMをBUGS言語で記述した例を、以下に示します。
+
+\clearpage
+\index{nimble@nimbleパッケージ}
+\begin{verbatim}
+library(nimble)
+modelcode <- nimbleCode(
+{
+#BUGS言語でモデルを記述する
+for (i in 1:N) {
+  # 決定論的モデル（切片+Deer+DBH）
+  # とリンク関数（log）
+  logit(p[i]) <- intercept + bx1*Deer[i] + bx2*DBH[i]
+  # p[i] <- 1/(1+exp(-(intercept + bx1*Deer[i] + bx2*DBH[i])))としても同じ
+  # 確率論的モデル（二項分布）
+  Debark[i] ~ dbin(p[i], 1)
+  # Debark[i] ~ dbern(p[i])でも同じ
+}
+# パラメータの事前分布
+intercept ~ dnorm(0.0, 1.0E-3) # 切片
+bx1 ~ dnorm(0.0, 1.0E-3)       # 説明変数Deerの係数
+bx2 ~ dnorm(0.0, 1.0E-3)       # 説明変数DBHの係数
+}                              # モデルの記述はここまで
+)
+\end{verbatim}
+この例をもとに、BUGS言語の基本を学びます。なお、\index{nimbleCode@\texttt{nimbleCode}}\texttt{nimbleCode}関数は、その内部に書かれたBUGS言語によるモデルをNIMBLEが認識できるように翻訳してくれる関数です。
+
+		\subsubsection{deterministic nodeとstochastic node}
+BUGS言語では、単なる代入部分はdeterministic node（\verb|<-|）で記述し、所与の確率分布に従う不確実性を含む部分はstochastic node（\verb|~|）で記述します。例えば、GLMの決定論的モデル（説明変数の線型結合部分）は、以下のように表現されています。
+\begin{verbatim}
+logit(p[i]) <- intercept + bx1*Deer[i] + bx2*DBH[i]
+\end{verbatim}
+一方、観測データが得られる過程は確率論的モデルで以下のように表現されています。
+\begin{verbatim}
+Debark[i] ~ dbin(p[i], 1)
+\end{verbatim}
+
+		\subsubsection{確率分布}
+BUGS言語では、以下のように、種々の確率分布を指定できます。先頭に必ずdがつきます。
+\begin{description}
+  \item[dnorm(平均, 分散の逆数)]正規分布
+  \item[dbern(生起確率)]ベルヌーイ分布
+  \item[dbin(生起確率, 総試行回数)]二項分布
+  \item[dpois(平均)]ポアソン分布
+  \item[dunif(下限, 上限)]一様分布
+\end{description}
+ほとんどはRの乱数生成関数と同じですが、正規分布は分散（$=\sigma^2$）の「逆数」を指定するところだけ注意が必要です。
+
+ここで紹介した分布以外にも、さまざまな確率分布が用意されています。詳細は、\href{https://r-nimble.org/manuals/NimbleUserManual_0.4.pdf}{NIMBLEのマニュアル}を確認してください。
+	\subsubsection{\index{じぜんぶんぷ@事前分布}事前分布}
+すでに述べたように、ベイズ統計では全てのパラメータに事前分布が必要となります。特に事前の情報がない場合、情報があまりない\index{ばくぜんじぜんぶんぷ@漠然事前分布}漠然事前分布を与えることが1つの方法です。漠然事前分布の例としては、非常に裾が広い（分散が大きい）正規分布などが挙げられます（図\ref{vague_norm}）。
+
+先ほども述べたように、BUGS言語の正規分布を与える関数は\verb|dnorm(平均, 分散の逆数)|という書き方をするので、分散が大きい$=$分散の逆数が小さい、という与え方になるところが、少しややこしいです。上記の例では、\verb|dnorm(0.0, 1.0E-3)|と書いていますが、$1.0E-3$とは$10^{-3}$と同じことです。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,clip]{vague_norm.eps}\\
+\caption{今回与えた漠然事前分布}
+\label{vague_norm}
+\end{center}
+\end{figure}
+
+今回のモデルでは、切片や環境条件の係数が推定したいパラメータですので、これらのパラメータに事前分布を与えました。事前分布を与えるときは、すでに述べたようにstochastic nodeで与えてください。
+
+	\subsection{データの準備}
+NIMBLEでは、\textgt{定数}と\textgt{データ}をそれぞれ別のリストとして用意する必要があります。定数とは、データの数や次元数などです。
+
+先ほどBUGS言語で記述したモデルにおいて定数と言えるのは、データ数を示す\verb|N|です。そのため、以下のようにして定数とデータのリストを用意します。
+\begin{verbatim}
+list_data <- list(Debark=treedf$Debark, Deer=treedf$Deer, DBH=treedf$DBH)
+list_cons <- list(N=nrow(treedf))
+\end{verbatim}
+
+	\subsection{初期値の設定}
+パラメータの推定は、MCMC法で行います。MCMC法は、すでに説明したように、複数の連鎖を計算します。そのため、推定したい全てのパラメータについて初期値を与える必要があります。そして、複数の独立した計算を行いますので、その数だけ初期値を設定する必要があります。以下は、3つの独立した計算を行う場合の、初期値の設定例です。
+\begin{verbatim}
+set.seed(1)
+init1 <- list(intercept=0, bx1=0, bx2=0)             # 連鎖1の初期値
+init2 <- list(intercept=-0.01, bx1=-0.01, bx2=-0.01) # 連鎖2の初期値
+init3 <- list(intercept=0.01, bx1=0.01, bx2=0.01)    # 連鎖3の初期値
+inits <- list(init1, init2, init3)
+\end{verbatim}
+最初の行の\verb|set.seed()|は、乱数の種を指定する関数です。この数字を固定することで、同じ結果を得ることが可能になります。
+
+	\subsection{監視対象パラメータの設定}
+推定したパラメータについて、結果を見たいパラメータ名は、明示的に指定する必要があります。
+\begin{verbatim}
+parameters <- c("intercept", "bx1", "bx2")
+\end{verbatim}
+
+	\subsection{MCMC法の条件設定}
+すでに説明したように、\index{MCMC法@MCMC（マルコフ連鎖モンテカルロ）法}MCMC法では、複数の計算を独立に行い、事後分布を得ます。そのため、連鎖の数を決める必要があります。また、
+MCMC法は1つ前に得た値の影響を受けるので、計算開始から一定範囲の計算結果は破棄し（burn-in）、また本計算に入った後でも一定間隔で値を間引く（thin）必要があります。そのため、以下の設定が必要です。
+\begin{description}
+\item[n.chains]連鎖の数。通常3。
+\item[n.update]burn-inの回数。パラメータが動きにくいモデルやデータが多いモデルでは多くの回数が必要。
+\item[n.iter]本計算の回数。
+\item[thin]値を間引く間隔。パラメータが動きにくいモデルでは間隔を大きくした方がいい。
+\end{description}
+では、これらの項目を設定します。
+\begin{verbatim}
+nc <- 3
+nb <- 2000
+ni <- 5000
+nt <- 3
+\end{verbatim}
+
+\subsection{MCMC法の実行}
+MCMC法は、\index{nimbleMCMC@\texttt{nimbleMCMC()}}\verb|nimbleMCMC|関数で実行できます。
+\begin{verbatim}
+out <- nimbleMCMC(code=modelcode,
+                  data=list_data,
+                  constants=list_cons,
+                  inits=inits,
+                  monitors=parameters,
+                  niter = ni,
+                  nburnin = nb,
+                  thin = nt,
+                  nchains = nc,
+                  progressBar = TRUE,
+                  samplesAsCodaMCMC = TRUE,
+                  summary = TRUE,
+                  WAIC = FALSE
+)
+\end{verbatim}
+引数の意味は、それぞれ以下の通りです。
+\begin{description}
+	\item[data]データを含むリスト
+	\item[constants]定数値を含むリスト
+	\item[inits]初期値を含むリスト
+	\item[monitors]監視対象パラメータ
+	\item[niter]本計算の回数
+	\item[nburnin]計算開始から破棄する計算回数
+	\item[thin]本計算においてサンプリングする間隔
+	\item[nchains]連鎖の数
+	\item[progressBar]計算の進行状況を表示するか
+	\item[sampleAsCodaMCMC]codaパッケージで読める形でサンプリング値をまとめるか
+	\item[summary]統計要約量を計算するか
+	\item[WAIC]WAICを計算するか
+\end{description}
+上記の関数を実行すると、以下のように進行します。
+\begin{verbatim}
+Defining model
+Building model
+Setting data and initial values
+Running calculate on model
+  [Note] Any error reports that follow may simply reflect missing values in model variables.
+Checking model sizes and dimensions
+Checking model calculations
+Compiling
+  [Note] This may take a minute.
+  [Note] Use 'showCompilerOutput = TRUE' to see C++ compilation details.
+Running chain 1 ...
+|-------------|-------------|-------------|-------------|
+|-------------------------------------------------------|
+Running chain 2 ...
+|-------------|-------------|-------------|-------------|
+|-------------------------------------------------------|
+Running chain 3 ...
+|-------------|-------------|-------------|-------------|
+|-------------------------------------------------------|
+\end{verbatim}
+
+\subsection{結果の検証}
+さて、MCMC法によって事後標本が得られました。しかし、事後分布が収束しているかなど、妥当な結果が得られているか確認する必要があります。ひとまず、事後標本から要約統計量を算出しましょう。事後要約量を算出するには、以下のようにします。\index{coda@codaパッケージ}\index{gelmandiag@\texttt{gelman.diag()}}\index{GRdiag@\texttt{GR.diag()}}
+\begin{verbatim}
+library(coda)
+resdf <- as.data.frame(out$summary$all.chain)
+GR.diag <- gelman.diag(out$samples, multivariate = FALSE)
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+\end{verbatim}
+結果のオブジェクトには、以下のようにさまざまな情報が含まれています。
+\begin{description}
+  \item[summary]事後要約量が、連鎖ごとと全連鎖について計算された結果
+  \item[samples]1つ1つのMCMC標本が格納されている。\verb|samples[, "パラメータ名"]|とすることで、個別のパラメータのMCMC標本を抽出することも可能。事後分布を図で示す際に必要となる。
+\end{description}
+
+
+得られた事後要約量を表示すると、平均値、中央値、標準偏差、95\%信用区間、$\hat{R}$値が含まれています。
+\begin{verbatim}
+resdf
+                  Mean       Median     St.Dev.     95%CI_low    95%CI_upp     Rhat
+bx1        0.002442375  0.002459484 0.001163498  4.871825e-06  0.004697643 1.005391
+bx2       -0.077917868 -0.078168811 0.006790872 -9.120089e-02 -0.064787325 1.001096
+intercept  0.140561541  0.135729538 0.210188647 -2.493864e-01  0.549282608 1.001604
+\end{verbatim}
+収束判定の指標として、$\hat{R}$値が1.1未満となることが提案されています（Gelman et al. 2004）。今回の結果を見ると、全てのパラメータが収束しているようです。
+
+次に、サンプリング値を目視でも確認しましょう。以下のように入力することで、図\ref{GLM_mcmctrace}が得られます。ここで出てくる\index{bayesplot@bayesplotパッケージ}\texttt{bayesplot}パッケージは、名前の通りMCMCの結果の作図を容易にしてくれるパッケージです。
+\begin{verbatim}
+library(bayesplot)
+mcmc_trace(out$samples) +
+ scale_color_discrete()
+# 他にもさまざまな図を描画できる
+mcmc_hist(out$samples)
+mcmc_intervals(out$samples)
+mcmc_dens(out$samples)
+\end{verbatim}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=12cm,pagebox=cropbox,clip]{GLM_mcmctrace.pdf}\\
+%\includegraphics[width=30\zw,clip]{posterior.eps}\\
+\caption{MCMCの収束状況}
+\label{GLM_mcmctrace}
+\end{center}
+\end{figure}
+MCMCの各連鎖が同じような値をサンプリングしており、かつ増減傾向もありませんので、定常分布に達したと判断できます。
+
+では最後に、\verb|glm()|による推定（最尤法）結果と比較してみましょう。すべてのパラメータが、最尤法とほぼ同じ値となっています（図\ref{comp_ML_MCMC}）。漠然事前分布を用いた場合、一般的にMCMC法による推定結果は最尤法とほぼ一致します。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{comp_ML_MCMC.pdf}\\
+%\includegraphics[width=30\zw,clip]{posterior.eps}\\
+\caption{パラメータの事後分布}
+\label{comp_ML_MCMC}
+\end{center}
+\end{figure}
+
+\clearpage
+\section{\index{GLMM@GLMM（一般化線形混合モデル）}GLMM（一般化線形混合モデル）}
+GLMMとは、Generalized Linear Mixed Modelの略です。GLMとの違いは、変量効果がモデルに含まれると言う意味のMixedが加わったことです。GLMMの基本的な構造は、以下のとおりです。
+\begin{align}
+\eta &=  \beta X^{T}  + \epsilon \label{glmm1}\\
+\epsilon &\sim N(0, \sigma^{2}) \label{glmm2}\\
+\eta &= g(\mu) \label{glmm3}\\
+\mathrm{Data} &\sim \text{Probability distribution}(\mu)\label{glmm4}
+\end{align}
+式\ref{glmm1}に変量効果$\epsilon$が含まれています。$\epsilon$の実態は式\ref{glmm2}に示されているとおり、正規分布に従う確率変数です（必ずしも正規分布である必要はありませんが、正規分布が使われることが多いです）。
+
+\subsection{\index{へんりょうこうか@変量効果}変量効果とは何か？}
+変量効果に用いるのは、カテゴリ変数です。カテゴリ変数を固定効果として扱うこともあると思います。その違いは、以下のとおりです。
+\begin{align}
+\beta &\sim N(0, 10^{3}) &\text{ 固定効果: 分散は非常に大きい値} \\
+\epsilon &\sim N(0, \sigma^{2}) &\text{ 変量効果: 分散はsigma$*$sigmaの値} 
+\end{align}
+この違いから分かるように、固定効果はカテゴリーごとの係数をカテゴリーごとに独立に推定する（漠然事前分布を与えている）のに対し、変量効果は$\sigma$の値によってはカテゴリー間で類似した値を取る可能性があります。ある要因について固定効果とするか変量効果とするかは、解析者の判断によるところが大きいです。
+
+ただし、例えばある薬品処理を行う区と行わない区といったように明確に区別され、かつそれぞれで十分な標本数が得られている場合は、固定効果とするべきです。一方、水準や処理の区別がそれほど厳密でなく、ある水準と別の水準の効果は類似しているが同一ではない場合は、変量効果とする方が適切と考えられます。
+
+変量効果を用いる利点は複数ありますが、飯島は特に以下の点で有用と考えます。詳細は、K\'{e}ry and Schaub（2016）の4章を見て下さい。
+\begin{description}
+\item[擬似反復の回避]ある一つの調査区から複数のデータを得ている場合、その調査区から得られたデータは独立ではないと考えられます。このようなデータについて調査区を変量効果としないと、それらのデータの効果を過剰に見積もってしまいます。
+\item[標本数が少ない水準の推定]変量効果はある共通の分布からある程度の分散を持った値の集合として推定されますので、標本数が少なく極端なデータとなっている水準の効果を全体の平均に近づけて推定できます（説得力の借用）。
+\end{description}
+一方、変量効果の集合は分布として推定されるため分布の分散パラメータを推定する必要があり、一般に計算負荷が大きくなります。
+
+    \subsubsection{今回のデータに潜む観測誤差}
+\ref{basic}部で説明したように、1つのStand内で複数の立木の剥皮の調査を行っています。また、1つのRegionに2つのStandを設置しています。そのため、StandやRegionは疑似反復の回避という意味での変量効果に該当すると考えられます。
+
+一方、毎木データには複数の樹種が含まれますが、樹種によって調査個体数は大きく異なっています。個体数が少ない樹種については、剥皮のされやすさを推定することは困難かもしれません。そのため、Speciesは表本数が少ない水準の推定という意味での変量効果に該当すると考えられます。
+
+以下では変量効果の考え方とBUGS言語での実装を習得するという目的のため、Speciesのみを変量効果とした単純なGLMMのパラメータ推定を行います。
+
+\subsection{Rの関数による解析}
+Rでは、GLMMを実行するための様々な関数が用意されています。ここでは、\index{glmmTMB@glmmTMBパッケージ}glmmTMBパッケージの\index{glmmTMB@\texttt{glmmTMB()}}\texttt{glmmTMB}関数を使います。\texttt{glmmTMB}関数では、切片の変量効果を\verb^(1|変量効果)^で指定します。比較のため、Speciesを固定効果としたGLMと比較してみましょう。
+\begin{verbatim}
+res1a <- glm(Debark ~ Deer + DBH + Species, family=binomial, treedf)
+summary(res1a)
+Coefficients:
+                        Estimate Std. Error z value Pr(>|z|)    
+(Intercept)            -1.201300   0.591527  -2.031 0.042270 *  
+Deer                    0.004110   0.001352   3.041 0.002358 ** 
+DBH                    -0.108778   0.009164 -11.870  < 2e-16 ***
+SpeciesGenus_speciesB  -1.129409   1.160774  -0.973 0.330564    
+SpeciesGenus_speciesC   0.654020   0.742138   0.881 0.378175    
+SpeciesGenus_speciesD -15.455610 735.296583  -0.021 0.983230
+（途中省略）
+
+library(glmmTMB)
+res2 <- glmmTMB(Debark ~ Deer + DBH + (1|Species), family=binomial, treedf)
+summary(res2)
+
+Conditional model:
+             Estimate Std. Error z value Pr(>|z|)    
+(Intercept)  0.047491   0.462120   0.103  0.91815    
+Deer         0.003935   0.001332   2.955  0.00312 ** 
+DBH         -0.106106   0.008990 -11.802  < 2e-16 ***
+（途中省略）
+
+ranef(res2)
+$Species
+               (Intercept)
+Genus_speciesA  -1.1398675
+Genus_speciesB  -1.8663019
+Genus_speciesC  -0.5668741
+Genus_speciesD  -2.5862356
+（途中省略）
+\end{verbatim}
+Speciesを固定効果として扱った場合、上記の例では種Dの係数の標準誤差が非常に大きくなっており、推定がうまくいっていないように見えます。一方、変量効果として扱った場合、他の種の係数と類似した値となっており、適切な推定が行えているように思えます。では、このGLMMのパラメータ推定をNIMBLEで実行してみましょう。
+
+\subsection{BUGS言語によるモデルの記述}
+GLMの場合と異なっているのは、当然ですが変量効果の指定の部分です。変量効果を含むモデルは、BUGS言語で以下のように記述できます。
+\begin{verbatim}
+ibrary(nimble)
+modelcode <- nimbleCode(
+{
+for (i in 1:N) {
+  # 決定論的モデル（切片+Deer+DBH+変量効果）
+  # とリンク関数（logit）
+  logit(p[i]) <- intercept + bx1*Deer[i] + bx2*DBH[i] + bSP[Species[i]]
+  # bSPは変量効果のパラメータ
+  # 確率論的モデル（ベルヌーイ分布）
+  Debark[i] ~ dbern(p[i])
+}
+#パラメータの事前分布
+intercept ~ dnorm(0.0, 1.0E-3) # 切片
+bx1 ~ dnorm(0.0, 1.0E-3)       # Deerの係数
+bx2 ~ dnorm(0.0, 1.0E-3)       # DBHの係数
+# 変量効果の事前分布
+for (j in 1:Nsp) {           # 種数だけ繰り返す
+  bSP[j] ~ dnorm(0.0, tau)   # 分散（sigma*sigma）の逆数を指定
+}
+tau <- pow(sigma, -2)          # 標準偏差（sigma）をtauに変換
+sigma ~ dunif(0, 100)          # sigmaの事前分布
+}                              # モデルの記述はここまで
+)
+\end{verbatim}
+		\subsubsection{変量効果の実装}
+ranefが変量効果（今回のデータではプロットの効果）です。変量効果の事前分布は正規分布ですが、分散の逆数がtauという値に制限されています。固定効果であれば、tauの値を非常に小さくして（つまり分散を非常に大きくして）、どのような値でも取り得るようにします。変量効果の場合は、分散をある程度制約することで、取り得る値に制約を与えています。
+
+では、このtauの値をどの程度にすればいいのでしょうか。これは、漠然事前分布を与えてデータから推定することができます。上記の例では、標準偏差（$=\sigma$）に範囲が広い一様分布を与えています。そして、標準偏差を2乗して逆数を取ることで、tauとしています。以前は正規分布の超パラメータとして逆ガンマ分布が広く用いられていましたが、分散の真の値が小さい場合、逆ガンマ分布は推定結果に偏りをもたらすことが明らかにされており（Gelman 2006）、現在では一様分布を使う事が一般的です。
+\begin{itemize}
+\item Gelman A (2006) Prior distributions for variance parameters in hierarchical models. Bayesian Analysis 1: 515-534.
+\end{itemize}
+
+\subsection{データの準備}
+\begin{verbatim}
+# データと定数の準備
+list_data <- list(Deer=treedf$Deer, DBH=treedf$DBH, Debark=treedf$Debark)
+list_cons <- list(N=nrow(treedf), Nsp=length(unique(treedf$Species)),
+  Species=as.numeric(as.factor(treedf$Species)))
+\end{verbatim}
+
+	\subsection{初期値の設定}
+\begin{verbatim}
+set.seed(2)
+init1 <- list(intercept=0, bx1=0, bx2=0, bSP=rnorm(list_cons$Nsp, 0, 0.1),
+  sigma=5)
+init2 <- list(intercept=-0.01, bx1=-0.01, bx2=-0.01,
+  bSP=rnorm(list_cons$Nsp, -0.01, 0.1), sigma=1)
+init3 <- list(intercept=0.01, bx1=0.01, bx2=0.01,
+  bSP=rnorm(list_cons$Nsp, 0.01, 0.11), sigma=10)
+inits <- list(init1, init2, init3)
+\end{verbatim}
+
+	\subsection{監視対象パラメータの設定}
+\begin{verbatim}
+parameters <- c("intercept", "bx1", "bx2", "bSP", "sigma")
+\end{verbatim}
+
+	\subsection{MCMC法の条件設定}
+\begin{verbatim}
+nc <- 3
+nb <- 2000
+ni <- 5000
+nt <- 3
+\end{verbatim}
+
+\subsection{MCMC法の実行}
+\begin{verbatim}
+out2 <- nimbleMCMC(code=modelcode,
+                  data=list_data,
+                  constants=list_cons,
+                  inits=inits,
+                  monitors=parameters,
+                  niter = ni,
+                  nburnin = nb,
+                  thin = nt,
+                  nchains = nc,
+                  progressBar = TRUE,
+                  samplesAsCodaMCMC = TRUE,
+                  summary = TRUE,
+                  WAIC = FALSE
+)
+\end{verbatim}
+
+\subsection{結果の検証}
+\begin{verbatim}
+# 要約量の計算
+library(coda)
+resdf <- as.data.frame(out2$summary$all.chain)
+GR.diag <- gelman.diag(out2$samples, multivariate = FALSE)
+resdf$Rhat <- GR.diag$psrf[,"Point est."]
+resdf
+                  Mean       Median     St.Dev.   95%CI_low    95%CI_upp     Rhat
+bSP[1]    -1.244750681 -1.218136760 0.675782651 -2.58130056  0.009635721 1.082530
+bSP[2]    -2.095838277 -2.035407397 0.882912392 -3.95642597 -0.547330724 1.027670
+bSP[3]    -0.637357250 -0.647378004 0.663687497 -1.95982069  0.606859838 1.152375
+（以下、省略）
+\end{verbatim}
+結果を見ると、一部のパラメータの$\hat{R}$が1.1以上となり、収束していないようです（Rのバージョンなどの違いにより、この回数でも収束することもある）。
+
+\subsection{収束しないときの対処法}
+MCMCが収束しないことは、よくあります。その際は、まずMCMCの挙動を確認することが基本になります。図を描いてみて、状況に応じた対応を取る必要があります。今回、$\hat{R}$が一番大きかった切片（intercept）の挙動を見てみます。
+
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{GLMM_mcmctrace.pdf}\\
+%\includegraphics[width=30\zw,clip]{posterior.eps}\\
+\caption{パラメータinterceptの事後分布}
+\label{mcmctraceglmm}
+\end{center}
+\end{figure}
+
+図から何を読み取るかですが、burnin後の値は一定の範囲を取り続けているようですが、連鎖の混交が十分でないように見えます（図\ref{mcmctraceglmm}）。収束しない場合の連鎖の挙動と対策は、基本的には以下のとおりです。
+
+\begin{description}
+  \item[連鎖の軌跡が左と右で一致していない]初期値の影響が残っている可能性があります。burninの回数を増やしましょう。
+  \item[連鎖の軌跡は一定だが連鎖同士が混ざっていない]計算回数を増やす、間引きの間隔をより大きく取る。
+\end{description}
+
+今回は後者のようですので、burninはそのままにして、計算回数を増やし、間引き間隔を広げてみましょう。
+
+\begin{verbatim}
+nc <- 3
+nb <- 2000
+ni <- 12000
+nt <- 10
+（後は同じ）
+\end{verbatim}
+
+結果を見ると、全てのパラメータは収束したようです。切片のパラメータの連鎖も、よく混交しています（図\ref{mcmctraceglmm2}）。
+\begin{verbatim}
+resdf
+                  Mean      Median     St.Dev.    95%CI_low    95%CI_upp     Rhat
+bSP[1]    -1.205358885 -1.18052525 0.663275766 -2.561084533 -0.015810994 1.000310
+bSP[2]    -2.108601339 -2.04725115 0.908666351 -4.120359737 -0.508786307 1.002011
+bSP[3]    -0.598346179 -0.57446324 0.624920573 -1.834556363  0.590748980 1.000793
+（以下、省略）
+\end{verbatim}
+
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{GLMM_mcmctrace2.pdf}\\
+%\includegraphics[width=30\zw,clip]{posterior.eps}\\
+\caption{再計算後のパラメータinterceptの事後分布}
+\label{mcmctraceglmm2}
+\end{center}
+\end{figure}
+
+では、結果が収束しましたので、\verb|glmmTMB|の推定結果と比べてみましょう。固定効果、変量効果共に、ほぼ同じ値となっているようです（図\ref{comp_ML_MCMC2}）。
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{3_glm/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{comp_ML_MCMC2.pdf}\\
+%\includegraphics[width=30\zw,clip]{posterior.eps}\\
+\caption{推定方法ごとのパラメータの事後分布}
+\label{comp_ML_MCMC2}
+\end{center}
+\end{figure}
