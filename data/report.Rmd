@@ -1,0 +1,63 @@
+---
+title: "rmarkdownによる簡易レポート"
+author: "飯島 勇人"
+date: "`r format(Sys.time(), '%Y/%m/%d')`"
+output:
+  bookdown::word_document2:
+    number_sections: false
+---
+
+# 見出し1
+あれこれ
+
+## 見出し2
+あれこれ
+
+### 見出し3
+箇条書き。
+
+- 項目1
+- 項目2
+    - ネストされた項目1
+
+# Rチャンク使うぜ
+とりあえず毎木データで、DBHと剥皮発生のGLMやったよ（図 \@ref(fig:glmfig)、表 \@ref(tab:glmtable)）。
+```{r, setup, include=FALSE}
+opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE)
+# 起点となるディレクトリの設定
+## ご自身の環境に合わせて変更して下さい
+setwd(file.path(path.expand("~"), "Library", "CloudStorage", "Box-Box", "R_lec"))
+
+# パッケージの読み込み
+library(here)
+library(tidyverse)
+library(readxl)
+library(broom.mixed)
+
+#---------------------------#
+# データの読み込みおよび操作
+#---------------------------#
+# 毎木データ
+treedf <- read_excel(here("data", "data.xlsx"), sheet="Trees")
+res <- glm(Debark ~ DBH, family=binomial, treedf)
+```
+
+図も作れます。Rコードを出力する、しないも選べます（ここはあえて出力しています）。
+```{r, glmfig, echo=TRUE, fig.cap="立木のDBHと剥皮発生の関係"}
+p1 <- ggplot(data=treedf, aes(x=DBH, y=Debark))+
+      geom_point(pch=16, col=rgb(0,0,0,0.1), size=3)+
+      geom_smooth(method="glm",
+        method.args=list(family=binomial(link="logit")), se=TRUE)
+p1
+```
+
+表も作れます。また、チャンク内で計算して得られた値やオブジェクトを、チャンク外（文章中）で参照することもできます。例えば、DBHの推定された係数は、`r round(coef(res)[2], digits=3)`です。
+```{r, glmtable, message=FALSE}
+restb <- tidy(res) %>%
+  bind_cols(., confint(res))
+kable(restb[, c(1,2,6,7,5)], format="pandoc",
+  col.names=c("変数", "平均値", "95%信用区間下限", "95%信用区間上限", "p値"),
+  digits=3, caption = "剥皮発生を説明するGLMの推定結果")
+```
+
+
