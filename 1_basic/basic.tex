@@ -27,6 +27,48 @@
 あらゆる作業を、コマンドで入力します。マウス操作に慣れた方は、コマンドを覚えたりコマンドによる
 操作が苦痛に感じられると思います。ですが、後述するようにコマンドによる操作は利点もあります。
 
+  \subsection{\texttt{R}の入手とパッケージ}
+    \subsubsection{\texttt{R}の入手}
+\texttt{R}は、公式サイト\url{https://cran.r-project.org/}からダウンロードして下さい。基本的にはOSに応じたbaseファイル（例：\verb|R-4.4.2-win.exe|、\verb|R-4.4.2-arm64.pkg|など）をダウンロード、インストールして下さい。ダウンロードしたファイルをダブルクリックして、言われた通りに進めていけばインストールできるはずです。
+
+    \subsubsection{パッケージ}
+\texttt{R}はそのままでも多くの機能を有していますが、追加的に必要な機能は「パッケージ」としてまとめられており、必要に応じて読み込む必要があります。パッケージを使うためには、以下の手順が必要です。
+
+\begin{itemize}
+  \item パッケージをダウンロードする（最初だけ必要）
+  \item \texttt{R}上で、使いたいパッケージを読み込む（毎回必要）
+\end{itemize}
+
+では、パッケージをダウンロードし、\texttt{R}上で呼び込んでみましょう。ここでは、データの操作性を高める\index{tidyverse@tidyverseパッケージ}\verb|tidyverse|パッケージ、およびExcel形式（\verb|.xls|および\verb|.xlsx|）ファイルを読み込む関数を含んでいる\index{readxl@readxlパッケージ}\verb|readexl|パッケージを読み込みます。最初ですので、ダウンロードから始めましょう。ダウンロードはインターネットに繋がっている状態で、\texttt{R}で以下のコマンドを打ち込むか、画面のメニューをクリックして辿って行います。
+
+\begin{itembox}[l]{パッケージのダウンロード}
+\begin{verbatim}
+> install.packages(c("tidyverse", "readxl"))
+trying URL 'https://ftp.yz.yamagata-u.ac.jp/pub/cran/bin/macosx/big-sur-arm64/contrib/4.4/tidyverse_2.0.0.tgz'
+Content type 'application/x-gzip' length 428901 bytes (418 KB)
+==================================================
+downloaded 418 KB
+
+trying URL 'https://ftp.yz.yamagata-u.ac.jp/pub/cran/bin/macosx/big-sur-arm64/contrib/4.4/readxl_1.4.3.tgz'
+Content type 'application/x-gzip' length 1538743 bytes (1.5 MB)
+==================================================
+downloaded 1.5 MB
+
+
+The downloaded binary packages are in
+	/var/folders/5f/r2l0rkcx2pd1r47n13b544340000gn/T//Rtmp0Mycyj/downloaded_packages
+\end{verbatim}
+\end{itembox}
+
+最後の「The downloaded binary packages are in」が出てくれば、ダウンロードとインストールに成功しています。では、以下のようにして\texttt{R}にパッケージを読み込みましょう。
+
+\begin{itembox}[l]{パッケージの読み込み}
+\begin{verbatim}
+> library(tidyverse)
+> library(readxl)
+\end{verbatim}
+\end{itembox}
+
   \subsection{データファイルを置く場所と場所の指定}
     \subsubsection{ファイルを置く場所}
 基本的には、好きな場所で構いません。ただし、個人的な流儀の問題になりますが、飯島は以下のようなフォルダ構造を構築した上で、データを「data」というフォルダに格納することをお勧めしています。
@@ -157,19 +199,6 @@
 \label{begin}
 この章では\texttt{R}にデータを読み込んで、整形・加工する方法を学びます。
 \texttt{R}での作業の全ての基礎となります。
-  \subsection{パッケージ}
-\texttt{R}はそのままでも多くの機能を有していますが、追加的に必要な機能は「パッケージ」としてまとめられており、必要に応じて読み込む必要があります。
-
-これ以降で使うパッケージについて、先に読み込んでおきます。では、これが出ている状態で、パッケージを読み込んでみましょう。ここでは、データの操作性を高める\index{tidyverse@tidyverseパッケージ}\verb|tidyverse|パッケージ、およびExcel形式（\verb|.xls|および\verb|.xlsx|）ファイルを読み込む関数を含んでいる\index{readxl@readxlパッケージ}\verb|readexl|パッケージを読み込みます。
-
-\begin{itembox}[l]{パッケージの読み込み}
-\begin{verbatim}
-> library(tidyverse)
-> library(readxl)
-\end{verbatim}
-\end{itembox}
-
-以上のコマンドを打ち込んでエンターキーを押せば、パッケージが読み込まれます。
   
   \subsection{\texttt{R}にデータを読み込ませる方法}
     \subsubsection{データファイルの作り方}
