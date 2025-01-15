@@ -139,30 +139,74 @@ Geodetic CRS:  WGS 84
 \end{itembox}
 
   \subsubsection{ラスタデータ}
-ラスタデータは、\index{readstars@\texttt{read\_stars()}}\verb|read_stars|関数で読み込みます。先ほど入手した、山梨県の詳細土地利用細分メッシュ（ラスタ）の1つを読み込んでみましょう。
+ラスタデータを扱えるパッケージとして、\index{terra@terraパッケージ}\verb|terra|パッケージと、\index{stars@starsパッケージ}\verb|stars|パッケージがあります。ここでは、\verb|terra|パッケージを用います。
+
+それでは、先ほど入手した、山梨県の詳細土地利用細分メッシュ（ラスタ）の1つを読み込んでみましょう。
 \begin{itembox}[l]{ラスタデータの読み込み}
 \begin{verbatim}
-library(stars)
-e <- read_stars(here("data", "L03-b-14_5238", "L03-b-14_5238.tif"))
-stars object with 2 dimensions and 1 attribute
-attribute(s):
- L03-b-14_5238.tif 
- 50     :320805    
- 0      :100000    
- 150    : 77458    
- 70     : 48285    
- 20     : 41220    
- 10     : 18839    
- (Other): 33393    
-dimension(s):
-  from  to offset      delta  refsys point x/y
-x    1 800    138    0.00125 JGD2000 FALSE [x]
-y    1 800  35.33 -0.0008333 JGD2000 FALSE [y]
+library(terra)
+e <- rast(here("data", "L03-b-14_5238", "L03-b-14_5238.tif"))
+e
+class       : SpatRaster 
+dimensions  : 800, 800, 1  (nrow, ncol, nlyr)
+resolution  : 0.00125, 0.0008333333  (x, y)
+extent      : 138, 139, 34.66667, 35.33333  (xmin, xmax, ymin, ymax)
+coord. ref. : lon/lat JGD2000 (EPSG:4612) 
+source      : L03-b-14_5238.tif 
+color table : 1 
+name        : L03-b-14_5238 
 \end{verbatim}
 \end{itembox}
 ラスタデータは、1箇所に1つのデータしか持てません。そのデータの要素ごとの個数や、測地系などに関する情報が表示されます。
 
-今回は、山梨県全体のラスタデータを入手しているので、実際には複数のラスタファイルを読み込み、結合する必要があります。\index{terra@terraパッケージ}\verb|terra|パッケージの\index{mosaic@\texttt{mosaic()}}\verb|mosaic|関数でも結合できるのですが、今回のファイルについては結合できなかったため、一度データ部分だけを抽出し、緯度経度情報をもとにベクタファイルとして再構築します。また、ファイル数が多いので、繰り返し命令を使いながら結合します。
+今回は、山梨県全体のラスタデータを入手しているので、実際には複数のラスタファイルを読み込み、結合する必要があります。ラスタデータの結合には、\verb|terra|パッケージの\index{mosaic@\texttt{mosaic()}}\verb|mosaic|関数を用います。ただし、ラスタデータを結合するためには、結合するデータでサイズが完全に一致している必要があります。そのため、\index{ext@\texttt{ext()}}\verb|ext|関数でどれか1つのラスタデータのサイズを抽出し、他のラスタをそのサイズに合わせる処理が必要です。
+
+また、ファイル数が多いので、繰り返し命令を使いながら結合します。以下が、この処理を実行するコードになります。
+\begin{verbatim}
+tifffiles <- list.files(getwd(), pattern="*\\.tif", recursive = TRUE)
+common_extent <- ext(rast(here(tifffiles[1])))
+for (i in 1:length(tifffiles)) {
+  temp <- rast(here(tifffiles[i])) %>%
+    extend(., common_extent)
+  if (i==1) { lu <- temp
+  } else { lu <- mosaic(lu, temp) }
+}
+# データを表示させる
+lu
+class       : SpatRaster 
+dimensions  : 2400, 1600, 1  (nrow, ncol, nlyr)
+resolution  : 0.00125, 0.0008333333  (x, y)
+extent      : 138, 140, 34.66667, 36.66667  (xmin, xmax, ymin, ymax)
+coord. ref. : lon/lat JGD2000 (EPSG:4612) 
+source(s)   : memory
+varname     : L03-b-14_5238 
+name        : L03-b-14_5238 
+min value   :             0 
+max value   :           160 
+\end{verbatim}
+このままでは結合できたか分かりにくいので、図として表示させてみましょう。
+
+\begin{verbatim}
+plot(lu)
+\end{verbatim}
+\begin{figure}[htb]
+\begin{center}
+\graphicspath{{2_gis/figs/}}
+\includegraphics[width=10cm,pagebox=cropbox,clip]{yama_landuse.pdf}\\
+\caption{複数のラスタデータを結合した結果}
+\label{yama_landuse}
+\end{center}
+\end{figure}
+
+\clearpage
+実際のデータ（どの土地利用形態か）は「varname」という名前（最初に読み込んだラスタファイル名）になっていますが、このままでは扱いにくいので、「Category」という名前に変更しましょう。また、土地利用形態は数字のコードで記録されていますが、そのままだと数値として認識されてしまい不都合が生じるので、要因型に変換します。
+
+\begin{verbatim}
+names(lu) <- "Category"
+lu <- as.factor(lu)
+\end{verbatim}
+
+なお、ラスタデータの扱い方はベクタデータと異なり、直感的にデータを取り出しにくいです。そのため、取り扱う空間範囲が比較的狭い場合は、ベクタデータに変換して扱うことも選択肢の一つです。以下では、ラスタデータを扱うもう一つのパッケージである\verb|stars|パッケージを使い、数値データを取り出してベクタデータに変換する例を示します。
 \begin{verbatim}
 tiffiles <- list.files(getwd(), pattern="*.tif", recursive = TRUE)
 for (i in 1:length(tiffiles)) {
@@ -181,11 +225,18 @@ lu <- lu %>%
 
   \subsection{データの操作}
 \subsubsection{座標参照系の変更}
-\index{sttransform@\texttt{st\_transform()}}単独のファイルについても状況によって緯度経度がよかったりメートル方が良かったりしますし、後に行う複数のファイルを結合する際には座標参照系が一致しなければならないので、これは非常に多用します。以下では、山梨県の行政界の座標参照系を、日本測地系2011の平面直角座標8系に変換しましょう。
+単独のファイルについても状況によって緯度経度がよかったりメートル法が良かったりしますし、後に行う複数のファイルを結合する際には座標参照系が一致しなければならないので、これは非常に多用します。ただし、ベクタファイルか、ラスタファイルかで変換方法が異なります。ベクタデータの場合は\index{sttransform@\texttt{st\_transform()}}\texttt{st\_transform}関数、ラスタデータの場合は\index{project@\texttt{project()}}\texttt{project}関数を使います。
+
+以下では、ベクタデータの例として山梨県の行政界の座標参照系を、ラスタデータの例として土地利用データの座標参照系を、日本測地系2011の平面直角座標8系に変換しましょう。
 \begin{itembox}[l]{座標参照系の変更}
 \begin{verbatim}
+# ベクタデータ
+## st_transform関数
 yama %>%
   st_transform(., crs=6676)
+# ラスタデータ
+## project関数
+project(lu, "EPSG:6676")
 \end{verbatim}
 \end{itembox}
 
@@ -235,10 +286,10 @@ yama %>%
 \end{verbatim}
 \end{itembox}
 
-\subsubsection{ファイル同士の結合}
-通常のファイル同士の結合については、すでに学びました。\verb|xxxx_join|関数で結合する際、結合するためには結合するデータに共通のIDが必要でした。一方、地理情報データは自分の位置の情報を持っていますので、このような共通のIDがなくても結合が可能です。ただし、正しく結合するためには、上記の座標参照系が一致している必要があります。
+\subsubsection{地理情報データのファイル同士の結合}
+通常のファイル同士の結合については、すでに学びました。\verb|xxxx_join|関数で結合する際、結合するためには結合するデータに共通のIDが必要でした。一方、地理情報データは自分の位置の情報を持っていますので、このような共通のIDがなくても結合が可能です。ただし、正しく結合するためには、上記の座標参照系が一致している必要があります。また、こちらもベクタ同士と、ベクタとラスタで結合する場合で方法が異なります。
 
-以下では、毎木調査のプロットに、山梨県の市町村情報を結合しましょう。そのために、まず両者の座標参照系を一致させます。毎木調査のプロットは元々は地理情報データはなく後からベクタファイルに変換しており、EPSGコードは4326（世界測地系、緯度経度）です。一方、山梨県の行政界は、EPSGコード4612（日本測地系2011、緯度経度）になっています。ここでは、日本測地系2011のメートル法である6676に両者を変換しましょう。
+以下ではベクタ同士の結合の例として、毎木調査のプロットに山梨県の市町村情報を結合しましょう。そのために、まず両者の座標参照系を一致させます。毎木調査のプロットは元々は地理情報データはなく後からベクタファイルに変換しており、EPSGコードは4326（世界測地系、緯度経度）です。一方、山梨県の行政界は、EPSGコード4612（日本測地系2011、緯度経度）になっています。ここでは、日本測地系2011のメートル法である6676に両者を変換しましょう。
 \begin{exercise}{座標参照系の変換}{sttransform1}
 \begin{verbatim}
 yama <- yama %>%
@@ -249,7 +300,7 @@ standloc <- standloc %>%
 \end{exercise}
 
 これで、結合する準備が整いました。ベクタファイル同士の結合は、\index{stintersection@\texttt{st\_intersection()}}\verb|st_intersection|を使います。
-\begin{itembox}[l]{ファイル同士の結合}
+\begin{itembox}[l]{ベクタファイル同士の結合}
 \begin{verbatim}
 standloc2 <- standloc %>%
   st_intersection(., yama)
@@ -267,121 +318,162 @@ Projected CRS: JGD2011 / Japan Plane Rectangular CS VIII
 \end{verbatim}
 \end{itembox}
 
-ちなみに、上記の「座標参照系の変換」および「ファイル同士の結合」は、わかりやすく説明するために個別に説明しましたが、実際は以下のように一連のパイプライン処理として記述が可能です。
+次に、ベクタファイル（毎木調査のプロット）とラスタファイル（土地利用形態）を結合しましょう。ベクタファイルとラスタファイルの結合は、\index{extract@\texttt{extract()}}\verb|extract|関数を使います。ラスタファイルも先ほどと同様に座標参照系を6676に変換してから実行します。
+\begin{itembox}[l]{ベクタファイルとラスタファイルの結合}
 \begin{verbatim}
-yama <- yama %>%
-  ____(., crs=6676)
-standloc2 <- standloc %>%
-  st_transform(., crs=6676) %>%
-  st_intersection(., yama)
+lu %>%
+  project(., "EPSG:6676") %>%
+  extract(., standloc, bind=TRUE)
+ class       : SpatVector 
+ geometry    : points 
+ dimensions  : 40, 5  (geometries, attributes)
+ extent      : 138.2518, 139.0567, 35.21183, 35.90802  (xmin, xmax, ymin, ymax)
+ coord. ref. : lon/lat WGS 84 (EPSG:4326) 
+ names       : Region Stand   lon   lat Category
+ type        :  <chr> <chr> <num> <num>   <fact>
+ values      :      A   ST1 138.3 35.84       50
+                    A   ST2 138.3 35.86       50
+                    B   ST1 138.4 35.91       50
 \end{verbatim}
+\end{itembox}
+\verb|bind|引数は、ベクタデータ側の属性を結果に含めるかを論理型で指示できます。上記の場合はTRUEに設定し、結果に含めています。
 
+\subsubsection{複合演習}
 では、ファイル結合を使ってもう少し実用的な解析をやってみましょう。「毎木調査のプロットの半径500m以内の、土地利用種ごとの割合」を算出します。この作業手順を整理すると、以下のようになります。
 \begin{itemize}
   \item 毎木調査プロットを日本測地系2011の平面直角座標8系に変換し、半径500mのバッファを生成する
   \item 土地利用情報を日本測地系2011の平面直角座標8系に変換、座標参照系を統一する
-  \item 毎木調査プロットのバッファと土地利用情報を結合する
-  \item 地域、プロット、土地利用種ごとに、データ数を計算する
+  \item 毎木調査プロットのバッファと土地利用情報を結合し、地域、プロット、土地利用種ごとにデータ数を計算する
+  \item 毎木調査プロットの地域とプロット情報を追加する
+  \item データを、扱いやすいように縦方向に変換する
   \item 地域、プロットごとに、すべての土地利用種の合計データ数に対する土地利用種のデータ数の比率を計算する
 \end{itemize}
-これまでに学んだ知識で実行できますので、演習を兼ねて順に実行します。
+これまでに学んだ知識で大部分は実行できますので、演習を兼ねて順に実行します。
 
 \begin{exercise}{半径500mのバッファを作る}{stbuffer1}
 \begin{verbatim}
 standloc2 <- standloc %>%
-  ____(., crs=6676) %>%
   ____(., dist=____)
 \end{verbatim}
 \end{exercise}
 
-\begin{exercise}{座標参照系を6676に変更}{sttransform2}
-注意！この処理は時間がかかります。
+\begin{exercise}{座標参照系を6676に変更}{project1}
 \begin{verbatim}
-lu <- lu %>%
-  ____(., crs=____)
-\end{verbatim}
-\end{exercise}
-
-\begin{exercise}{ベクタファイル同士の結合}{stintersection1}
-\begin{verbatim}
+# ベクタデータ
 standloc2 <- standloc2 %>%
-  ____(., lu)
+  ____(., crs=6676)
+# ラスタデータ
+lu <- lu %>%
+  ____(., "EPSG:6676")
 \end{verbatim}
 \end{exercise}
 
-\begin{exercise}{土地利用種ごとのデータ数の計算}{reframe4}
+次は、500mバッファ（ベクタファイル）と土地利用形態（ラスタファイル）を結合し、地域とプロットのバッファごとに、土地利用種ごとのデータ数を計算します。ベクタデータとラスタデータの結合に用いる関数はすでに説明しましたが、土地利用種ごとのデータ数の集計については説明していませんでした。これは、\verb|extract|関数の引数で対応できます。
 \begin{verbatim}
-landuseratio <- standloc2 %>%
-  group_by(____, ____, lu) %>%
-  ____(Landuse=n())
+ludf <- lu %>%
+  extract(., standloc2, fun=table)
+head(ludf)
+  ID 0 10 20 50 60 70 91 92 100 110 140 150 160
+1  1 0  0  0 77  0  0  0  0   0   0   0   0   0
+2  2 0  0  0 79  0  0  0  0   0   0   0   0   0
+（以下、省略）
 \end{verbatim}
-\end{exercise}
+ご覧いただけばわかるように、ID（ベクタデータの上から順番に振られた数字に対応）ごとに、土地利用形態（数字でコードされている）ごとのデータ数が記録されています。これは、引数\verb|fun|にカテゴリごとのデータ数を集計するtable関数を指定したことによって達成されています。ただし、IDでは分かりにくいので、ベクタデータの地域とプロットの情報を、以下のように付与します。
+
+\begin{verbatim}
+ludf <- ludf  %>%
+  bind_cols(., standloc2[, c("Region", "Stand")]) %>%
+  select(-geometry) # ベクタデータに必ず付随するgeometry列を削除
+head(ludf)
+  ID 0 10 20 50 60 70 91 92 100 110 140 150 160 Region Stand
+1  1 0  0  0 77  0  0  0  0   0   0   0   0   0      A   ST1
+2  2 0  0  0 79  0  0  0  0   0   0   0   0   0      A   ST2
+（以下、省略）
+\end{verbatim}
+
+次はいよいよ地域かつプロットごとの土地利用種の「割合」を計算したいのですが、計算するにあたってはデータが縦方向に
+展開されていた方が実施しやすいので、以下のようにして縦方向に変換します。
+
+\begin{verbatim}
+ludf <- ludf  %>%
+  pivot_longer(., cols=2:14, names_to="Category", values_to="lu")
+head(ludf)
+# A tibble: 6 × 5
+  ID    Region Stand Category    lu
+  <chr> <chr>  <chr> <chr>    <int>
+1 1     A      ST1   0            0
+2 1     A      ST1   10           0
+3 1     A      ST1   20           0
+4 1     A      ST1   50          77
+（以下、省略）
+\end{verbatim}
+
+では、プロットごとの土地利用種の割合を計算しましょう。
 
 \begin{exercise}{プロットごとの土地利用種の割合の計算}{mutate4}
 \begin{verbatim}
-landuseratio <- landuseratio %>%
+ludf <- ludf %>%
   group_by(Region, Stand) %>%
-  ____(LanduseRatio=Landuse/sum(Landuse))
-landuseratio
-# A tibble: 73 × 5
+  ____(lu=lu/sum(lu))
+# A tibble: 520 × 5
 # Groups:   Region, Stand [40]
-   Region Stand lu    Landuse LanduseRatio
-   <chr>  <chr> <fct>   <int>        <dbl>
- 1 A      ST1   50         75       1     
- 2 A      ST2   50         78       1     
+   ID    Region Stand Category    lu
+   <chr> <chr>  <chr> <chr>    <dbl>
+ 1 1     A      ST1   0            0
+ 2 1     A      ST1   10           0
+ 3 1     A      ST1   20           0
+ 4 1     A      ST1   50           1
 （以下、省略）
 \end{verbatim}
 \end{exercise}
-以上で、土地利用種の割合を計算すること自体はできました。ただし、土地利用の種類は数字でコードされており、直感的にわかりにくいです。また、結果を視覚的に把握するためには、データが横方向に展開されていた方が見やすいかもしれません。
+以上で、土地利用種の割合を計算すること自体はできました。ただし、土地利用の種類は数字でコードされており、直感的にわかりにくいです。また、結果を視覚的に把握するためには、データが横方向に展開されていた方が見やすいかもしれません。そこで、数字のコードを土地利用の名称に置き換え、データを横方向に展開しましょう。
 
 \begin{itembox}[l]{土地利用種の割り当てと横方向への展開}
 \begin{verbatim}
-ludf <- landuseratio %>%
-  filter(lu!=0) %>%
-  mutate(Type=case_when(lu=="10" ~ "Rice",
-    lu=="20" ~ "Farm",
-    lu=="50" ~ "Forest",
-    lu=="60" ~ "Wasteland",
-    lu=="70" ~ "Buildings",
-    lu=="91" ~ "Road",
-    lu=="92" ~ "Railway",
-    lu=="100" ~ "Humansettlements",
-    lu=="110" ~ "River",
-    lu=="140" ~ "Seashore",
-    lu=="150" ~ "Sea",
-    lu=="160" ~ "Golf")) %>%
-  pivot_wider(., id_cols=c("Region", "Stand"), names_from="Type",
-    values_from="LanduseRatio", values_fill=0)
+ludf <- ludf %>%
+  filter(Category!=0) %>%
+  mutate(Category=case_when(Category=="10" ~ "Rice",
+    Category=="20" ~ "Farm",
+    Category=="50" ~ "Forest",
+    Category=="60" ~ "Wasteland",
+    Category=="70" ~ "Buildings",
+    Category=="91" ~ "Road",
+    Category=="92" ~ "Railway",
+    Category=="100" ~ "Humansettlements",
+    Category=="110" ~ "River",
+    Category=="140" ~ "Seashore",
+    Category=="150" ~ "Sea",
+    Category=="160" ~ "Golf")) %>%
+  pivot_wider(., id_cols=c("Region", "Stand"), names_from="Category",
+    values_from="lu", values_fill=0)
 \end{verbatim}
 \end{itembox}
 
 この一連の処理も、本来であればパイプラインで一度に記述することができます。
 \begin{verbatim}
-lu <- lu %>%
-  st_transform(., crs=6676)
-ludf <- standloc %>%
-  st_transform(., crs=6676) %>%
-  st_buffer(., dist=500) %>%
-  st_intersection(., lu) %>%
-  group_by(Region, Stand, lu) %>%
-  reframe(Landuse=n()) %>%
+lu <- project(lu, "EPSG:6676")
+ludf <- lu %>%
+  extract(., standloc2, bind=TRUE, fun=table) %>%
+  bind_cols(., standloc2[, c("Region", "Stand")]) %>%
+  select(-geometry) %>%
+  pivot_longer(., cols=2:14, names_to="Category", values_to="lu") %>%
   group_by(Region, Stand) %>%
-  mutate(LanduseRatio=Landuse/sum(Landuse)) %>%
-  filter(lu!=0) %>%
-  mutate(Type=case_when(lu=="10" ~ "Rice",
-    lu=="20" ~ "Farm",
-    lu=="50" ~ "Forest",
-    lu=="60" ~ "Wasteland",
-    lu=="70" ~ "Buildings",
-    lu=="91" ~ "Road",
-    lu=="92" ~ "Railway",
-    lu=="100" ~ "Humansettlements",
-    lu=="110" ~ "River",
-    lu=="140" ~ "Seashore",
-    lu=="150" ~ "Sea",
-    lu=="160" ~ "Golf")) %>%
-  pivot_wider(., id_cols=c("Region", "Stand"), names_from="Type",
-    values_from="LanduseRatio", values_fill=0)
+  mutate(lu=lu/sum(lu)) %>%
+  filter(Category!=0) %>%
+  mutate(Category=case_when(Category=="10" ~ "Rice",
+    Category=="20" ~ "Farm",
+    Category=="50" ~ "Forest",
+    Category=="60" ~ "Wasteland",
+    Category=="70" ~ "Buildings",
+    Category=="91" ~ "Road",
+    Category=="92" ~ "Railway",
+    Category=="100" ~ "Humansettlements",
+    Category=="110" ~ "River",
+    Category=="140" ~ "Seashore",
+    Category=="150" ~ "Sea",
+    Category=="160" ~ "Golf")) %>%
+  pivot_wider(., id_cols=c("Region", "Stand"), names_from="Category",
+    values_from="lu", values_fill=0)
 \end{verbatim}
 
 \section{作図}
